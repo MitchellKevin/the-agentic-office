@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Agent Office — watch your Claude Code agents at work</title>
+  <meta name="description" content="A free, open-source 3D office for Claude Code. Every session is a robot at a desk. Runs on your machine, zero dependencies.">
+  <!-- The one place to set the repository URL. Every clone command on the page is filled from this. -->
+  <meta name="repo" content="https://github.com/YOUR-USERNAME/agent-office.git">
+  <!-- The one place to set the €2,99 coffee checkout link (e.g. a Stripe Payment Link). Every [data-donate-link] is filled from this. -->
+  <meta name="donate" content="https://buy.stripe.com/YOUR-COFFEE-LINK">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
+  <meta name="theme-color" content="#0b0d12">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="atmo" aria-hidden="true"><i class="band b1"></i><i class="band b2"></i><i class="band b3"></i><i class="vignette"></i><i class="grain"></i></div>
+
+  <main class="hero">
+    <h1>
+      <span>We’ve watched agents scroll by before.</span>
+      <span class="warm">This time we built them an office.</span>
+    </h1>
+
+    <div class="clone">
+      <div class="clone-box">
+        <code><span class="prompt">$</span> git clone <span data-repo-url>https://github.com/YOUR-USERNAME/agent-office.git</span></code>
+        <button class="copy" type="button" aria-label="Copy the clone command">Copy</button>
+      </div>
+      <p class="then">then <code>cd agent-office &amp;&amp; npm start</code> · open <code>localhost:4317</code> · Node 20+</p>
+    </div>
+
+    <!-- ───────── Robot: follows your cursor, click it to cycle through its states ───────── -->
+    <button class="stage" type="button" data-state="watch" aria-label="The robot is watching you. Click its face to make it smile.">
+      <span class="bubble" aria-hidden="true"><span class="b-kicker">Hi</span><span class="b-text">Tap my face</span></span>
+      <svg id="robot" viewBox="0 0 800 560" focusable="false" aria-hidden="true">
+        <defs>
+          <!-- amber paint -->
+          <linearGradient id="gShell" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#f7b96e"/><stop offset=".34" stop-color="#d97a30"/><stop offset=".74" stop-color="#86400f"/><stop offset="1" stop-color="#341704"/>
+          </linearGradient>
+          <radialGradient id="gSheen" cx="26%" cy="14%" r="70%">
+            <stop offset="0" stop-color="#fff4e2" stop-opacity=".42"/><stop offset=".5" stop-color="#fff4e2" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="gRim" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#fff1dc" stop-opacity=".85"/><stop offset=".42" stop-color="#fff1dc" stop-opacity="0"/>
+          </linearGradient>
+          <radialGradient id="gPad" cx="34%" cy="12%" r="88%">
+            <stop offset="0" stop-color="#f6b46c"/><stop offset=".34" stop-color="#c96b26"/><stop offset="1" stop-color="#2e1404"/>
+          </radialGradient>
+          <!-- graphite + steel -->
+          <linearGradient id="gSteel" x1="0" x2="1">
+            <stop offset="0" stop-color="#0b0c0f"/><stop offset=".28" stop-color="#383c44"/><stop offset=".5" stop-color="#8d949f"/><stop offset=".72" stop-color="#2a2d34"/><stop offset="1" stop-color="#07080a"/>
+          </linearGradient>
+          <linearGradient id="gCore" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#2b2d35"/><stop offset="1" stop-color="#0a0b0e"/>
+          </linearGradient>
+          <radialGradient id="gCoreSheen" cx="40%" cy="0%" r="80%">
+            <stop offset="0" stop-color="#ffd8a8" stop-opacity=".2"/><stop offset="1" stop-color="#ffd8a8" stop-opacity="0"/>
+          </radialGradient>
+          <linearGradient id="gGlass" x1="0" y1="0" x2=".7" y2="1">
+            <stop offset="0" stop-color="#fff" stop-opacity=".12"/><stop offset=".42" stop-color="#fff" stop-opacity="0"/>
+          </linearGradient>
+          <radialGradient id="gScreenVig" cx="50%" cy="50%" r="64%">
+            <stop offset=".55" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity=".6"/>
+          </radialGradient>
+          <!-- LED mesh: dark cells, and the same grid as a mask so the face lights whole cells -->
+          <pattern id="pCellsDark" width="7.4" height="7.4" patternUnits="userSpaceOnUse"><rect x="1.1" y="1.1" width="5.2" height="5.2" rx=".9" fill="#08090c"/></pattern>
+          <pattern id="pCellsLit" width="7.4" height="7.4" patternUnits="userSpaceOnUse"><rect x="1.1" y="1.1" width="5.2" height="5.2" rx=".9" fill="#fff"/></pattern>
+          <mask id="mScreen" maskUnits="userSpaceOnUse" x="0" y="0" width="800" height="560"><rect x="256" y="74" width="288" height="222" rx="62" fill="url(#pCellsLit)"/></mask>
+          <clipPath id="cScreen"><rect x="256" y="74" width="288" height="222" rx="62"/></clipPath>
+          <filter id="fSoft" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="9"/></filter>
+          <filter id="fBlur" x="-30%" y="-80%" width="160%" height="260%"><feGaussianBlur stdDeviation="10"/></filter>
+          <filter id="fGlow" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <path id="padL" d="M100 600 C96 505 128 432 205 404 C236 394 262 398 282 410 C270 470 266 540 268 600 Z"/>
+        </defs>
+
+        <!-- body -->
+        <g id="rTorso">
+          <path d="M236 600 C238 500 246 438 268 414 C300 392 350 386 400 386 C450 386 500 392 532 414 C554 438 562 500 564 600 Z" fill="url(#gCore)"/>
+          <path d="M236 600 C238 500 246 438 268 414 C300 392 350 386 400 386 C450 386 500 392 532 414 C554 438 562 500 564 600 Z" fill="url(#gCoreSheen)"/>
+          <path d="M286 420 L318 474 L482 474 L514 420" fill="none" stroke="#000" stroke-opacity=".55" stroke-width="2.5"/>
+          <path d="M286 423 L318 477 L482 477 L514 423" fill="none" stroke="#ffd8a8" stroke-opacity=".12" stroke-width="1.5"/>
+          <ellipse cx="400" cy="394" rx="96" ry="15" fill="#0a0b0e" stroke="#3a3d45" stroke-opacity=".6" stroke-width="2"/>
+          <g id="rChest">
+            <circle cx="400" cy="548" r="58" fill="#07080a" stroke="#22242a" stroke-width="10"/>
+            <circle class="r-led r-ring" cx="400" cy="548" r="47" fill="none" stroke-width="4" filter="url(#fGlow)"/>
+          </g>
+          <use href="#padL" fill="url(#gPad)"/>
+          <use href="#padL" fill="url(#gPad)" transform="matrix(-1 0 0 1 800 0)"/>
+          <path d="M150 452 C170 426 196 410 226 403" fill="none" stroke="#fff1dc" stroke-opacity=".4" stroke-width="5" stroke-linecap="round"/>
+          <path d="M650 452 C630 426 604 410 574 403" fill="none" stroke="#fff1dc" stroke-opacity=".22" stroke-width="5" stroke-linecap="round"/>
+        </g>
+
+        <!-- neck -->
+        <g id="rNeck">
+          <rect x="326" y="306" width="148" height="92" rx="14" fill="url(#gSteel)"/>
+          <rect x="318" y="356" width="164" height="12" rx="6" fill="url(#gSteel)"/>
+          <ellipse cx="400" cy="330" rx="118" ry="16" fill="#000" opacity=".7" filter="url(#fBlur)"/>
+        </g>
+
+        <!-- head -->
+        <g id="rHead">
+          <!-- back layers move against the face, which reads as the head turning -->
+          <g id="rBack">
+            <rect x="220" y="40" width="360" height="290" rx="100" fill="#2a1205" stroke="#6b3410" stroke-opacity=".6" stroke-width="2"/>
+            <rect x="194" y="138" width="36" height="100" rx="18" fill="url(#gSteel)"/>
+            <ellipse class="r-led r-ear" cx="201" cy="188" rx="8" ry="40" fill="none" stroke-width="4" filter="url(#fGlow)"/>
+            <rect x="570" y="138" width="36" height="100" rx="18" fill="url(#gSteel)"/>
+            <ellipse class="r-led r-ear" cx="599" cy="188" rx="8" ry="40" fill="none" stroke-width="4" filter="url(#fGlow)"/>
+          </g>
+
+          <rect x="220" y="40" width="360" height="290" rx="100" fill="url(#gShell)"/>
+          <rect x="220" y="40" width="360" height="290" rx="100" fill="url(#gSheen)"/>
+          <rect x="221.5" y="41.5" width="357" height="287" rx="98.5" fill="none" stroke="url(#gRim)" stroke-width="3"/>
+
+          <g class="zzz"><text x="196" y="96">z</text><text x="166" y="66">z</text><text x="130" y="34">Z</text></g>
+
+          <g id="rFace">
+            <rect x="244" y="62" width="312" height="246" rx="76" fill="#060709"/>
+            <rect x="245" y="63" width="310" height="244" rx="75" fill="none" stroke="#ffe2c0" stroke-opacity=".35" stroke-width="2.5"/>
+            <!-- wires of the mesh -->
+            <rect x="256" y="74" width="288" height="222" rx="62" fill="#3d4049"/>
+            <!-- face light bleeding onto the wires (filled from the lit layer by site.js) -->
+            <g clip-path="url(#cScreen)"><g filter="url(#fSoft)" opacity=".85"><g class="eyes" data-glow></g></g></g>
+            <rect x="256" y="74" width="288" height="222" rx="62" fill="url(#pCellsDark)"/>
+            <!-- lit cells: one face per state, CSS shows the right one -->
+            <g mask="url(#mScreen)">
+              <g class="eyes" data-lit>
+                <g class="lids">
+                  <g class="fp f-open"><rect x="316" y="136" width="44" height="84" rx="22"/><rect x="440" y="136" width="44" height="84" rx="22"/></g>
+                  <g class="fp f-work"><rect x="316" y="170" width="44" height="34" rx="14"/><rect x="440" y="170" width="44" height="34" rx="14"/></g>
+                  <g class="fp f-joy line"><path d="M316 194 Q338 150 360 194"/><path d="M440 194 Q462 150 484 194"/></g>
+                </g>
+                <g class="fp f-mouth line"><path d="M372 262 Q400 270 430 257"/></g>
+                <g class="fp f-smile line"><path d="M364 250 Q400 286 436 250"/></g>
+                <g class="fp f-work"><rect class="type t1" x="324" y="248" width="62" height="9" rx="4.5"/><rect class="type t2" x="394" y="248" width="34" height="9" rx="4.5"/><rect class="type t3" x="436" y="248" width="40" height="9" rx="4.5"/></g>
+                <g class="fp f-alert"><rect x="384" y="100" width="32" height="104" rx="14"/><rect x="384" y="224" width="32" height="32" rx="14"/></g>
+                <g class="fp f-sleep"><rect x="312" y="184" width="50" height="9" rx="4.5"/><rect x="438" y="184" width="50" height="9" rx="4.5"/><rect x="386" y="250" width="28" height="9" rx="4.5"/></g>
+              </g>
+            </g>
+            <rect x="256" y="74" width="288" height="222" rx="62" fill="url(#gScreenVig)"/>
+            <rect x="256" y="74" width="288" height="222" rx="62" fill="url(#gGlass)"/>
+          </g>
+        </g>
+      </svg>
+    </button>
+    <p class="sr-only" aria-live="polite" data-state-live></p>
+  </main>
+
+  <!-- ───────── Panel above the dock (one view at a time) ───────── -->
+  <div class="panel" id="panel" role="dialog" aria-label="Agent Office details" inert>
+    <section data-view="robots" hidden>
+      <p class="kicker">The robots</p>
+      <h2>Every Claude Code session is a robot at a desk.</h2>
+      <p>Its face tells you what it’s doing. Pick a state, or use the robot button in the dock to cycle through them.</p>
+      <ul class="states">
+        <li data-s="working"><button type="button" data-set-state="working"><b>Working</b> typing, with the live tool call above its head</button></li>
+        <li data-s="needs"><button type="button" data-set-state="needs"><b>Needs you</b> stands up and waves with a red !</button></li>
+        <li data-s="turn"><button type="button" data-set-state="turn"><b>Your turn</b> done, off to the water cooler</button></li>
+        <li data-s="idle"><button type="button" data-set-state="idle"><b>Idle</b> slumped at the desk, zzz</button></li>
+      </ul>
+      <img src="assets/t14.0.jpg" width="960" height="540" alt="Inside a project floor: robots at desks, two of them flagging that they need you">
+    </section>
+
+    <section data-view="office" hidden>
+      <p class="kicker">The office</p>
+      <h2>One building. A floor for every project.</h2>
+      <p>Pick a floor and the camera flies in. Desks are grouped per git branch, and new agents get their own worktree. Click any robot to read along, or type its next task.</p>
+      <img src="assets/t55.0.jpg" width="960" height="540" alt="The Agent Office building at night, with one tag per project floor and live status dots">
+    </section>
+
+    <section data-view="privacy" hidden>
+      <p class="kicker">The privacy</p>
+      <h2>It never leaves your machine.</h2>
+      <ul class="checks">
+        <li>Binds to 127.0.0.1 only. No accounts, no telemetry, no outbound requests.</li>
+        <li>Transcripts are opened read-only.</li>
+        <li>Host, Origin and a per-run token guard every approval.</li>
+        <li>Loads nothing from a CDN, enforced by a strict CSP.</li>
+      </ul>
+    </section>
+
+    <section data-view="coffee" hidden>
+      <p class="kicker">Buy the robots a coffee</p>
+      <h2>Agent Office is free. The coffee machine isn’t.</h2>
+      <p>If it saves you a few tab switches, a one-off coffee keeps the project going. Thanks, it really helps.</p>
+      <a class="coffee-btn" data-donate-link href="https://buy.stripe.com/YOUR-COFFEE-LINK" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9h11v5.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5Z"/><path d="M15.5 10.5h1.2a2.3 2.3 0 0 1 0 4.6h-1.5"/><path class="steam" d="M8 3.5c-.8 1 .8 1.8 0 3M11.5 3.5c-.8 1 .8 1.8 0 3"/></svg>
+        <span>Buy me a coffee</span>
+        <span class="price">€2,99</span>
+      </a>
+      <p class="fine-note">One-time payment through a secure checkout. No account, no subscription.</p>
+    </section>
+
+    <section data-view="menu" hidden>
+      <ul class="menu">
+        <li><button type="button" data-open="robots">The robots</button></li>
+        <li><button type="button" data-open="office">The office</button></li>
+        <li><button type="button" data-open="privacy">The privacy</button></li>
+        <li><button type="button" data-open="coffee">Buy me a coffee · €2,99</button></li>
+        <li><a data-repo-link href="https://github.com/YOUR-USERNAME/agent-office">Source on GitHub ↗</a></li>
+      </ul>
+      <p class="fine">Agent Office · MIT licensed · © 2026 Mitchell Scholte</p>
+    </section>
+  </div>
+
+  <!-- ───────── Dock ───────── -->
+  <div class="dock">
+    <button class="dock-btn" type="button" data-cycle aria-label="Show the robot's next state" title="Next state">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect class="o" x="5.5" y="6.5" width="21" height="19" rx="7"/><rect class="o" x="2.6" y="13" width="2.4" height="6" rx="1.2"/><rect class="o" x="27" y="13" width="2.4" height="6" rx="1.2"/><rect class="f" x="11.2" y="11.5" width="3.2" height="7" rx="1.6"/><rect class="f" x="17.6" y="11.5" width="3.2" height="7" rx="1.6"/></svg>
+    </button>
+    <button class="dock-btn" type="button" data-open="menu" aria-controls="panel" aria-expanded="false" aria-label="Menu">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path class="o" d="M9 13.5h14M9 18.5h14"/></svg>
+    </button>
+    <button class="dock-btn" type="button" data-open="coffee" aria-controls="panel" aria-expanded="false" aria-label="Buy me a coffee, €2,99" title="Buy me a coffee · €2,99">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path class="o" d="M7 13h14v6.5a5.5 5.5 0 0 1-5.5 5.5h-3A5.5 5.5 0 0 1 7 19.5Z"/><path class="o" d="M21 15h1.6a2.9 2.9 0 0 1 0 5.8H21"/><path class="o steam" d="M11.5 5.5c-1 1.2 1 2.2 0 3.6M16.5 5.5c-1 1.2 1 2.2 0 3.6"/></svg>
+    </button>
+    <button class="cta" type="button" data-demo aria-haspopup="dialog">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3.2v9.6a.6.6 0 0 0 .9.5l7.6-4.8a.6.6 0 0 0 0-1L5.9 2.7a.6.6 0 0 0-.9.5Z"/></svg>
+      Watch demo
+    </button>
+  </div>
+
+  <!-- ───────── Demo video overlay ───────── -->
+  <dialog class="demo" aria-label="Agent Office demo video">
+    <button class="demo-close" type="button" aria-label="Close the demo">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+    <video src="assets/demo.mp4" poster="assets/t03.0.jpg" width="1600" height="900" controls playsinline preload="none"></video>
+  </dialog>
+
+  <script src="site.js" defer></script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+{
+  "port": 4317,
+  "host": "127.0.0.1",
+  "projectsDir": "~/.claude/projects",
+  "hideOlderThanHours": 12,
+  "idleMinutes": 30,
+  "permissionGuessSeconds": 8,
+  "approvalWaitSeconds": 45,
+  "quickTools": ["Edit", "Write", "MultiEdit", "Read", "Grep", "Glob", "NotebookEdit", "LS"],
+  "askTools": ["AskUserQuestion", "ExitPlanMode"],
+  "tasks": { "enabled": true, "claudePath": null, "defaultMode": "acceptEdits", "maxRunning": 6, "worktreeRoot": "~/agent-office-worktrees", "approvalWaitSeconds": 600 },
+  "orgFile": "~/.agent-office/org.json",
+  "teams": { "defaultTurns": 8, "maxTurns": 30 },
+
+  "contextWindows": [
+    { "match": "fable", "tokens": 1000000 },
+    { "match": "mythos", "tokens": 1000000 },
+    { "match": "opus-5", "tokens": 1000000 },
+    { "match": "opus-4-8", "tokens": 1000000 },
+    { "match": "opus-4-7", "tokens": 1000000 },
+    { "match": "opus-4-6", "tokens": 1000000 },
+    { "match": "sonnet-5", "tokens": 1000000 },
+    { "match": "sonnet-4-6", "tokens": 1000000 },
+    { "match": "haiku-5", "tokens": 1000000 },
+    { "match": "", "tokens": 200000 }
+  ],
+
+  "pricingNote": "USD per million tokens. Estimates only; check the official pricing page. cacheWrite5m defaults to 1.25x input and cacheWrite1h to 2x input when omitted. First match on the model id wins.",
+  "pricing": [
+    { "match": "fable-5-2",  "input": 8,    "output": 40,   "cacheRead": 0.20, "cacheWrite5m": 10,  "cacheWrite1h": 16 },
+    { "match": "mythos-5-2", "input": 8,    "output": 40,   "cacheRead": 0.20, "cacheWrite5m": 10,  "cacheWrite1h": 16 },
+    { "match": "fable-5-1",  "input": 10,   "output": 50,   "cacheRead": 0.25 },
+    { "match": "mythos-5-1", "input": 10,   "output": 50,   "cacheRead": 0.25 },
+    { "match": "fable-5",    "input": 10,   "output": 50,   "cacheRead": 1.00 },
+    { "match": "mythos-5",   "input": 10,   "output": 50,   "cacheRead": 1.00 },
+    { "match": "opus-5-5",   "input": 4,    "output": 20,   "cacheRead": 0.20 },
+    { "match": "opus-5",     "input": 5,    "output": 25,   "cacheRead": 0.50 },
+    { "match": "opus-4-8",   "input": 5,    "output": 25,   "cacheRead": 0.50 },
+    { "match": "opus-4-7",   "input": 5,    "output": 25,   "cacheRead": 0.50 },
+    { "match": "opus-4-6",   "input": 5,    "output": 25,   "cacheRead": 0.50 },
+    { "match": "opus-4-5",   "input": 5,    "output": 25,   "cacheRead": 0.50 },
+    { "match": "opus",       "input": 15,   "output": 75,   "cacheRead": 1.50 },
+    { "match": "sonnet-5-5", "input": 2,    "output": 10,   "cacheRead": 0.10 },
+    { "match": "sonnet-5",   "input": 2,    "output": 10,   "cacheRead": 0.20 },
+    { "match": "sonnet",     "input": 3,    "output": 15,   "cacheRead": 0.30 },
+    { "match": "haiku-5-5",  "input": 0.10, "output": 0.50, "cacheRead": 0.01 },
+    { "match": "haiku-4-5",  "input": 1,    "output": 5,    "cacheRead": 0.10 },
+    { "match": "haiku",      "input": 0.80, "output": 4,    "cacheRead": 0.08 }
+  ],
+  "fallbackPricing": { "input": 4, "output": 20, "cacheRead": 0.20 }
+}

@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="ao-token" content="__AO_TOKEN__">
+  <meta name="color-scheme" content="light dark">
+  <!-- The €2,99 coffee checkout link (a Stripe Payment Link or https://paypal.me/<you>/2.99EUR). -->
+  <meta name="donate" content="https://buy.stripe.com/YOUR-COFFEE-LINK">
+  <title>Agent Office</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M16 4v4' stroke='%23e0a458' stroke-width='2' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='3.6' r='2.3' fill='%23e0a458'/%3E%3Crect x='2.5' y='14' width='3.5' height='8' rx='1.75' fill='%23b07a3a'/%3E%3Crect x='26' y='14' width='3.5' height='8' rx='1.75' fill='%23b07a3a'/%3E%3Crect x='5' y='8' width='22' height='20' rx='6.5' fill='%23e0a458'/%3E%3Crect x='8.2' y='12.6' width='15.6' height='9.6' rx='4.3' fill='%231b1f27'/%3E%3Ccircle cx='12.7' cy='17.4' r='2.1' fill='%235ff0d0'/%3E%3Ccircle cx='19.3' cy='17.4' r='2.1' fill='%235ff0d0'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="console" role="banner">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><path class="ant" d="M16 4v4"/><circle class="head" cx="16" cy="3.6" r="2.3"/><rect class="ear" x="2.5" y="14" width="3.5" height="8" rx="1.75"/><rect class="ear" x="26" y="14" width="3.5" height="8" rx="1.75"/><rect class="head" x="5" y="8" width="22" height="20" rx="6.5"/><rect class="visor" x="8.2" y="12.6" width="15.6" height="9.6" rx="4.3"/><circle class="eye" cx="12.7" cy="17.4" r="2.1"/><circle class="eye" cx="19.3" cy="17.4" r="2.1"/></svg>
+      <span class="name">Agent Office</span>
+      <span class="mode-chip" id="modeChip" hidden>demo</span>
+    </div>
+
+    <div class="counters" role="group" aria-label="Summary">
+      <button class="counter needs" id="cNeeds" title="Agents waiting on you">
+        <span class="dot"></span><span class="label">Needs you</span><span class="value" id="vNeeds">0</span>
+      </button>
+      <div class="counter working" title="Agents working right now">
+        <span class="dot"></span><span class="label">Working</span><span class="value" id="vWorking">0</span>
+        <span class="sub" id="vInterns"></span>
+      </div>
+      <div class="counter" id="cTokens" title="">
+        <span class="label">Tokens today</span><span class="value" id="vTokens">0</span>
+      </div>
+      <div class="counter" title="Estimated from config.json pricing; not a bill">
+        <span class="label">Est. cost</span><span class="value" id="vCost">$0.00</span>
+      </div>
+    </div>
+
+    <div class="tools">
+      <button class="tool-btn team-btn" id="teamBtn" title="Team: let the departments work together on a goal" aria-expanded="false" aria-controls="teamDrawer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M2.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><path d="M14 14.6c.8-.4 1.6-.6 2.5-.6 2.3 0 4.2 1.5 4.7 4.5"/></svg>
+        <span class="tool-label">Team</span>
+        <span class="badge run" id="teamBadge" hidden>0</span>
+      </button>
+      <button class="tool-btn task-btn" id="taskBtn" title="Give a robot a task (T)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4.5V3h6v1.5"/><path d="M12 9v6M9 12h6"/></svg>
+        <span class="tool-label">New task</span>
+        <span class="badge run" id="tasksBadge" hidden>0</span>
+      </button>
+      <button class="tool-btn approvals-btn" id="approvalsBtn" aria-label="Approvals" title="Approvals">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v6c0 4.4 3.4 8.3 8 9 4.6-.7 8-4.6 8-9V6Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>
+        <span class="badge" id="approvalsBadge" hidden>0</span>
+      </button>
+      <button class="tool-btn" id="chimeBtn" aria-pressed="false" title="Chime when an agent needs you">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 1 1 12 0v5l1.5 2h-15Z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>
+      </button>
+      <button class="tool-btn" id="filmBtn" aria-pressed="false" title="Safe to film: blur prompts and file paths">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3"/></svg>
+        <span class="tool-label">Safe to film</span>
+      </button>
+      <div class="sky-wrap">
+        <button class="tool-btn" id="themeBtn" aria-expanded="false" aria-controls="skyPop" title="Time of day">
+          <svg viewBox="0 0 24 24" aria-hidden="true" id="skyIcon"><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/></svg>
+          <span class="sky-btn-time" id="skyLabel"></span>
+        </button>
+        <div class="sky-pop" id="skyPop" role="dialog" aria-label="Time of day" hidden>
+          <div class="sky-head">
+            <div class="sky-now"><b id="skyTime">12:00</b><span id="skyPhase">Midday</span></div>
+            <button class="sky-auto" id="skyAuto" aria-pressed="true" title="Follow your computer's clock">Follow clock</button>
+          </div>
+          <input type="range" id="skyRange" min="0" max="24" step="0.25" value="12" aria-label="Time of day" aria-describedby="skyNote">
+          <div class="sky-ticks" aria-hidden="true"><span>00</span><span>06</span><span>12</span><span>18</span><span>24</span></div>
+          <p class="sky-note" id="skyNote">Light from 07:00 to 19:00, dark at night. Drag to pick a time yourself.</p>
+        </div>
+      </div>
+      <a class="tool-btn coffee-btn" id="coffeeBtn" target="_blank" rel="noopener" title="Buy me a coffee · €2,99" aria-label="Buy me a coffee, €2,99 (opens in a new tab)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 9h11v5.5a4.5 4.5 0 0 1-4.5 4.5H9a4.5 4.5 0 0 1-4.5-4.5Z"/><path d="M15.5 10.5h1.2a2.3 2.3 0 0 1 0 4.6h-1.5"/><path d="M8 3.5c-.8 1 .8 1.8 0 3M11.5 3.5c-.8 1 .8 1.8 0 3"/></svg>
+        <span class="tool-label">Coffee · €2,99</span>
+      </a>
+    </div>
+  </header>
+
+  <nav class="floors" id="floors" aria-label="Building and floors">
+    <label class="project-pick" title="Every building is one project">
+      <span class="floors-head">Building</span>
+      <select id="projectSel" aria-label="Project (building)"></select>
+    </label>
+    <div class="floors-head floors-sub">Departments</div>
+    <div class="floors-list" id="floorsList" role="list"></div>
+    <div class="floors-foot">
+      <button class="dept-add" id="deptAdd" type="button">＋ Add department</button>
+      <button class="dept-edit icon-btn" id="deptEdit" type="button" title="Edit departments: names, roles and floor order" aria-label="Edit departments">✎</button>
+    </div>
+  </nav>
+
+  <main class="stage" id="stage">
+    <div class="floor-bar" id="floorBar" hidden>
+      <span class="fb-floor" id="fbFloor"></span>
+      <label class="fb-branch" id="fbBranchWrap" hidden>
+        <span class="fb-icon" aria-hidden="true">⎇</span>
+        <select id="fbBranch" aria-label="Branch"></select>
+      </label>
+      <span class="fb-note" id="fbNote" hidden></span>
+      <button class="fb-task" id="fbTask" type="button">＋ <span id="fbTaskLabel">New task</span></button>
+    </div>
+    <canvas id="office" aria-label="3D office building: the building is a project, each floor a department, each character a Claude Code session"></canvas>
+    <div class="tooltip" id="tooltip" hidden></div>
+    <div class="empty" id="boot">
+      <h2>Starting Agent Office…</h2>
+      <p>If this message stays, the page was not opened through the local server.<br>Run <code>npm start</code> in the project folder, then open <b>http://localhost:4317</b>.</p>
+    </div>
+    <div class="empty" id="empty" hidden>
+      <h2>The office is quiet</h2>
+      <p>No Claude Code sessions in the last <span id="emptyHours">12</span> hours. Start one in a terminal and it will walk in here.</p>
+      <p><a href="?demo=1">Open the demo office</a></p>
+    </div>
+    <div class="zoom" role="group" aria-label="View">
+      <button id="zoomIn" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="zoomOut" title="Zoom out" aria-label="Zoom out">−</button>
+      <button id="zoomFit" title="Fit all rooms" aria-label="Fit">⤢</button>
+    </div>
+    <div class="hint">Drag to pan · right-drag or shift-drag to rotate · scroll to zoom · [ ] change floor · B building</div>
+    <div class="footer-bar">
+      <button id="hiddenBtn" class="link-btn" hidden></button>
+      <span id="connState" class="conn"></span>
+    </div>
+    <div class="legend" aria-hidden="true">
+      <span><i class="lg working"></i>working</span>
+      <span><i class="lg needs"></i>needs you</span>
+      <span><i class="lg turn"></i>your turn</span>
+      <span><i class="lg idle"></i>idle</span>
+    </div>
+  </main>
+
+  <aside class="panel" id="panel" aria-label="Session details" hidden>
+    <div class="panel-head">
+      <div class="panel-title">
+        <div class="status-pill" id="pStatus"></div>
+        <h2 id="pTitle" class="sensitive"></h2>
+        <div class="panel-meta" id="pMeta"></div>
+        <label class="dept-pick" id="pDeptWrap" hidden title="Move this robot to another department. It takes the lift.">
+          <span>Department</span>
+          <select id="pDept" aria-label="Department"></select>
+        </label>
+      </div>
+      <button class="tool-btn give-btn" id="pTask" title="Give this robot a task (T)">Give task</button>
+      <button class="icon-btn" id="pClose" aria-label="Close panel">✕</button>
+    </div>
+    <div id="pTaskStrip"></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="steps" aria-selected="true">Steps</button>
+      <button role="tab" data-tab="conversation">Conversation</button>
+      <button role="tab" data-tab="files">Files</button>
+      <button role="tab" data-tab="tokens">Tokens</button>
+      <button role="tab" data-tab="approvals">Approvals</button>
+    </nav>
+    <div class="panel-body" id="pBody"></div>
+    <form class="composer" id="pCompose" hidden>
+      <p class="composer-note" id="pComposeNote" hidden></p>
+      <div class="composer-box">
+        <textarea id="pComposeText" rows="1" class="sensitive" placeholder="Give this robot a task…" aria-label="Message to this robot"></textarea>
+        <button type="submit" class="composer-send" id="pComposeSend" aria-label="Send" title="Send (Enter)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+        </button>
+      </div>
+      <div class="composer-foot">
+        <select id="pComposeMode" aria-label="Permissions for this task">
+          <option value="acceptEdits">Edit files</option>
+          <option value="plan">Plan only</option>
+          <option value="auto">Auto</option>
+        </select>
+        <span class="composer-where" id="pComposeWhere"></span>
+        <span class="kbd-hint">Enter to send · Shift+Enter for a new line</span>
+      </div>
+    </form>
+  </aside>
+
+  <aside class="drawer" id="drawer" aria-label="Approvals" hidden>
+    <div class="drawer-head">
+      <h2>Approvals</h2>
+      <button class="icon-btn" id="dClose" aria-label="Close approvals">✕</button>
+    </div>
+    <p class="drawer-hint" id="dHint"></p>
+    <div class="drawer-body" id="dBody"></div>
+  </aside>
+
+  <dialog class="task-dlg" id="taskDlg" aria-labelledby="tTitle">
+    <form id="taskForm" novalidate>
+      <div class="dlg-head">
+        <h2 id="tTitle">Give a robot a task</h2>
+        <button type="button" class="icon-btn" id="tClose" aria-label="Close">✕</button>
+      </div>
+      <label class="field">
+        <span class="field-label">Who</span>
+        <select id="tWho" class="sensitive"></select>
+      </label>
+      <p class="field-hint" id="tWhoHint"></p>
+      <div class="field branch-field" id="tBranchRow" hidden>
+        <label class="field-label" for="tBranch">Branch</label>
+        <select id="tBranch"></select>
+        <div class="new-branch" id="tNewRow" hidden>
+          <input id="tNewName" type="text" autocomplete="off" spellcheck="false" placeholder="feature/my-change" aria-label="New branch name">
+          <label class="from">from <select id="tBase" aria-label="Start the new branch from"></select></label>
+        </div>
+        <p class="field-hint" id="tBranchHint"></p>
+      </div>
+      <label class="field">
+        <span class="field-label">Task</span>
+        <textarea id="tPrompt" rows="5" class="sensitive" placeholder="e.g. Add a test for the refund endpoint and make it pass"></textarea>
+      </label>
+      <fieldset class="field modes">
+        <legend class="field-label">Permissions</legend>
+        <label class="mode"><input type="radio" name="mode" value="acceptEdits"><span><b>Edit files</b><small>Reads and edits files without asking. Anything else that needs permission shows up in Approvals (with the hooks installed), otherwise it is refused.</small></span></label>
+        <label class="mode"><input type="radio" name="mode" value="plan"><span><b>Plan only</b><small>Looks around and writes a plan. Changes nothing.</small></span></label>
+        <label class="mode"><input type="radio" name="mode" value="auto"><span><b>Auto</b><small>Claude Code's safety check decides what may run.</small></span></label>
+      </fieldset>
+      <p class="dlg-error" id="tError" role="alert" hidden></p>
+      <div class="dlg-actions">
+        <span class="kbd-hint">⌘↵ to send</span>
+        <button type="button" class="btn" id="tCancel">Cancel</button>
+        <button type="submit" class="btn allow" id="tSend">Send task</button>
+      </div>
+    </form>
+  </dialog>
+
+  <aside class="drawer team-drawer" id="teamDrawer" aria-label="Team" hidden>
+    <div class="drawer-head">
+      <h2>Team <span class="muted" id="tdProject"></span></h2>
+      <button class="icon-btn" id="tdClose" aria-label="Close team">✕</button>
+    </div>
+    <p class="drawer-hint">The departments work on one goal together, on their own. One works at a time, then takes the lift to hand the work to the next with a short message.</p>
+    <div class="td-actions"><button class="btn allow" id="tdStart" type="button">Start a team…</button></div>
+    <div class="drawer-body" id="tdBody"></div>
+  </aside>
+
+  <dialog class="task-dlg" id="teamDlg" aria-labelledby="tmTitle">
+    <form id="teamForm" novalidate>
+      <div class="dlg-head">
+        <h2 id="tmTitle">Start a team</h2>
+        <button type="button" class="icon-btn" id="tmClose" aria-label="Close">✕</button>
+      </div>
+      <p class="field-hint" id="tmWhere"></p>
+      <label class="field">
+        <span class="field-label">Goal</span>
+        <textarea id="tmGoal" rows="4" class="sensitive" placeholder="e.g. Add a wishlist to the product pages, with tests"></textarea>
+      </label>
+      <fieldset class="field">
+        <legend class="field-label">Departments in the team</legend>
+        <div class="tm-depts" id="tmDepts"></div>
+        <p class="field-hint">Each department gets its own robot for the run. The one marked <b>starts</b> gets the goal first.</p>
+      </fieldset>
+      <fieldset class="field modes">
+        <legend class="field-label">Permissions</legend>
+        <label class="mode"><input type="radio" name="tmMode" value="acceptEdits"><span><b>Edit files</b><small>Reads and edits files without asking. Anything else waits in Approvals (with the hooks installed), otherwise it is refused.</small></span></label>
+        <label class="mode"><input type="radio" name="tmMode" value="plan"><span><b>Plan only</b><small>The team looks around and writes plans. Nothing changes.</small></span></label>
+        <label class="mode"><input type="radio" name="tmMode" value="auto"><span><b>Auto</b><small>Claude Code's safety check decides what may run.</small></span></label>
+      </fieldset>
+      <label class="field tm-turns">
+        <span class="field-label">Turns</span>
+        <span class="tm-turns-row"><input id="tmTurns" type="number" min="1" max="30" step="1" value="8"> <small class="field-hint">Each turn is one department's go. The team stops after this many, even if it isn't done.</small></span>
+      </label>
+      <p class="dlg-error" id="tmError" role="alert" hidden></p>
+      <div class="dlg-actions">
+        <span class="kbd-hint">⌘↵ to start</span>
+        <button type="button" class="btn" id="tmCancel">Cancel</button>
+        <button type="submit" class="btn allow" id="tmSend">Start team</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="task-dlg dept-dlg" id="deptDlg" aria-labelledby="dpTitle">
+    <form id="deptForm" novalidate>
+      <div class="dlg-head">
+        <h2 id="dpTitle">Departments</h2>
+        <button type="button" class="icon-btn" id="dpClose" aria-label="Close">✕</button>
+      </div>
+      <p class="field-hint" id="dpWhere"></p>
+      <div class="dp-list" id="dpList" role="list"></div>
+      <div class="field">
+        <span class="field-label">Add a department</span>
+        <div class="dp-presets" id="dpPresets"></div>
+      </div>
+      <p class="dlg-error" id="dpError" role="alert" hidden></p>
+      <div class="dlg-actions">
+        <span class="kbd-hint">The role is given to the department's robots with every task.</span>
+        <button type="button" class="btn" id="dpCancel">Cancel</button>
+        <button type="submit" class="btn allow" id="dpSave">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

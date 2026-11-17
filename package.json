@@ -1,0 +1,17 @@
+{
+  "name": "agent-office",
+  "version": "0.1.0",
+  "description": "Local, open-source observability for Claude Code, shown as a 3D office.",
+  "type": "module",
+  "license": "MIT",
+  "files": ["src", "public", "hooks", "scripts", "config.json", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "bin": { "agent-office": "src/server.js" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js",
+    "setup-hooks": "node scripts/setup-hooks.js",
+    "remove-hooks": "node scripts/remove-hooks.js",
+    "record-demo": "node scripts/record-demo.js"
+  }
+}
