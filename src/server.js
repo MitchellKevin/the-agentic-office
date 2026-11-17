@@ -201,7 +201,7 @@ export function createServer(cfg, store) {
         let body;
         try { body = JSON.parse(await readBody(req)); } catch { return send(res, 400, { error: 'bad json' }); }
         const r = orgChange(store, body || {});
-        return send(res, r.error ? r.code || 400 : 200, r.error ? { error: r.error } : { ok: true, org: store.org.toJSON() });
+        return send(res, r.error ? r.code || 400 : 200, r.error ? { error: r.error } : { ok: true, ...r, org: store.org.toJSON() });
       }
 
       if (req.method === 'POST' && p === '/api/teams') {
@@ -236,7 +236,7 @@ export function createServer(cfg, store) {
  *   { op: 'departments', projectKey, departments: [{ id?, name, role }] }
  *   { op: 'assign', projectKey, sessionId, dept }
  */
-export function orgChange(store, { op, projectKey, departments, sessionId, dept }) {
+export function orgChange(store, { op, projectKey, departments, sessionId, sessionIds, dept }) {
   const key = String(projectKey || '');
   const name = key ? store.projectNameOf(key) : null;
   if (!key || (!name && !store.org.project(key))) return { error: 'Unknown building.', code: 404 };
@@ -246,7 +246,34 @@ export function orgChange(store, { op, projectKey, departments, sessionId, dept 
     if (!s || store.placeOf(s).projectKey !== key) return { error: 'Unknown robot.', code: 404 };
     return store.org.assign(key, s.id, String(dept || ''), name);
   }
+  if (op === 'dismiss') return dismiss(store, key, sessionIds);
   return { error: 'Unknown change.', code: 400 };
+}
+
+/**
+ * Sends robots home (they take a taxi): hidden from the office until their session does
+ * something new. Nothing on disk is deleted. Busy robots stay: they'd only walk back in.
+ * Returns { dismissed: [ids], skipped: [{ id, reason }] }.
+ */
+function dismiss(store, key, sessionIds) {
+  const ids = Array.isArray(sessionIds) ? [...new Set(sessionIds.map(String))].slice(0, 500) : [];
+  if (!ids.length) return { error: 'Pick a robot to send home.', code: 400 };
+  const now = store.now();
+  const dismissed = [], skipped = [];
+  for (const id of ids) {
+    const s = store.sessions.get(id);
+    if (!s || store.placeOf(s).projectKey !== key) { skipped.push({ id, reason: 'Unknown robot.' }); continue; }
+    const sum = store.summary(s, now);
+    const reason = sum.task ? 'It is on a task. Stop the task first.'
+      : sum.status === 'working' ? 'It is working.'
+      : sum.status === 'needs_you' ? 'It is waiting on you.'
+      : sum.team && store.teams.runs.get(sum.team)?.status === 'running' ? 'It is part of a team that is still working.'
+      : null;
+    if (reason) skipped.push({ id, reason });
+    else dismissed.push(id);
+  }
+  if (dismissed.length) store.org.dismiss(dismissed, now);
+  return { dismissed, skipped };
 }
 
 /** A department's role for a robot's tasks, as an appended system prompt. */

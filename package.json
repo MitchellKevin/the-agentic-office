@@ -4,6 +4,7 @@
   "description": "Local, open-source observability for Claude Code, shown as a 3D office.",
   "type": "module",
   "license": "MIT",
+  "author": "Mitchell Scholte",
   "files": ["src", "public", "hooks", "scripts", "config.json", "README.md", "LICENSE"],
   "engines": { "node": ">=20" },
   "bin": { "agent-office": "src/server.js" },

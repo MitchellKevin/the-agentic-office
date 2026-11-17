@@ -3,7 +3,7 @@
 A local, open-source observability app for [Claude Code](https://claude.com/claude-code), shown as a 3D office building in a small city.
 
 - **Every project is a building.** Pick the one you want in the **Building** menu at the top left. The project's name hangs over the entrance.
-- **Every floor is a department:** Development, Design, QA, or whatever you add. A building has a lobby with a reception desk, one glass-walled floor per department, and a roof with an "Agent Office" sign.
+- **Every floor is a department:** Development, Design, QA, or whatever you add. A building has a lobby with a reception desk, one glass-walled floor per department, and a roof with a sign showing the project's name next to the Agent Office logo.
 - **A glass lift** runs up the outside of the building. Robots ride it when they move to another department, and when they go and talk to another department.
 - **Around it:** a whole city grid. There are streets with traffic, crosswalks and traffic lights, plus pavements with street trees, lamps and parked cars. The buildings are office blocks, glass towers, brick apartments and shops with awnings, and the block in front of Agent Office is a fountain square. It all sits under a sky with drifting clouds that follows the time of day. The sun crosses the sky and turns golden at sunrise and sunset. At night the page goes dark, and the city gets stars, a moon and lit windows. The city is batched into a handful of draw calls, so it stays smooth.
 - **Each Claude Code session is a robot at a desk** on its department's floor. Its eyes and antenna light show its status: cyan while working, flashing red when it needs you, blue on your turn, dimmed when idle.
@@ -71,6 +71,22 @@ A new building has one floor, **General**, where all its robots work. To add flo
 **Moving a robot:** open it and pick another floor under **Department** in the side panel. It gets up, takes the lift and sits down at a desk on its new floor.
 
 **Hiring into a department:** the task dialog has a **＋ New robot in _department_** option for every floor.
+
+### Sending robots home
+
+To tidy the office up, send robots you're done with home:
+
+- **One robot:** open it and press **🚕 Send home**.
+- **All idle robots in this building:** press **🚕** under the floor list.
+
+The robot says goodbye, takes the lift down, walks out of the front door and gets into a taxi at the rank in front of the building. The taxi drives off.
+
+What it does and doesn't do:
+
+- **Nothing is deleted.** The session's transcript stays on disk; Agent Office only stops showing it.
+- **It comes back by itself.** As soon as the session does something new (you resume it, or give it a task), it walks back in.
+- **Busy robots stay.** A robot that is working, waiting on you, on a task or part of a running team can't be sent home.
+- **Show N hidden sessions** at the bottom left shows them again for now.
 
 ### Teams: departments working together
 
@@ -259,7 +275,7 @@ With hooks installed, status comes from the hook events, which are exact, and th
 
 - The server binds to **127.0.0.1 only** and makes **no outbound network requests** itself. The only process it starts is `claude -p`, and only when you give a robot a task. That process talks to Anthropic exactly like Claude Code in your terminal does. The page loads no fonts, scripts or images from anywhere else, and a strict Content-Security-Policy enforces that.
 - Transcripts are opened **read-only**. Agent Office itself writes two files:
-  - `~/.agent-office/org.json`: your departments (names, roles, floor order) and which robot works on which floor. It holds session ids, no prompts or conversations, and is written only when you change departments, move a robot or hire one into a department. Set `orgFile` to `null` to keep it in memory only.
+  - `~/.agent-office/org.json`: your departments (names, roles, floor order), which robot works on which floor, and which robots you sent home. It holds session ids and times, no prompts or conversations, and is written only when you change departments, move a robot, hire one into a department or send robots home. Set `orgFile` to `null` to keep it in memory only.
   - `~/.claude/settings.json`, only when you run `setup-hooks` or `remove-hooks`.
 - Tasks and team runs you start can edit files in their project, like any Claude Code session. Set `tasks.enabled` to `false` to turn both off completely.
 - **Task folders come from the server, never from the page.** A task always runs in the working folder of a session Agent Office already knows. The prompt goes to the process on stdin, never through a shell.
@@ -323,21 +339,21 @@ public/app.js     UI shell; panel.js, tasks.js (task dialog), team.js (departmen
 ## Demo video
 
 ```bash
-npm run record-demo            # → media/agent-office-demo.mp4 (1920×1080, 30 fps, about a minute)
-npm run record-demo -- --stills  # checks the MP4 plays and saves preview frames to media/stills/
+npm run record-demo            # → site/assets/demo.mp4 (1920×1080, 30 fps, under two minutes)
+npm run record-demo -- --stills  # checks the MP4 plays and saves preview frames to media/stills/ (git-ignored)
 ```
 
-The recorder uses the **demo office**, so the video never shows your real sessions, prompts or file paths. It plays a scripted tour with captions and a moving cursor:
+The recorder uses the **demo office**, so the video never shows your real sessions, prompts or file paths. It plays a scripted tour with captions and a moving cursor, plus letterboxed cinematic shots where the UI fades away:
 
-1. the building
+1. the building: a street-level opening on the entrance sign, a crane up the facade to the rooftop sign, then the whole building
 2. the floors (departments)
-3. the robots
+3. the robots, with close-ups of a robot at work and one waving because it needs you
 4. branch zones
 5. talking to a robot in the Conversation tab
 6. a new task on a new branch
-7. a team run: a hand-off by lift, with speech bubbles
+7. a team run: a close-up on the first robot, a tracking shot as it walks to the lift, the ride up seen from outside the glass shaft, and the hand-over on the next floor
 8. approvals
-9. day turning into night
+9. day turning into night, with a low sweep through the lit-up streets to the glowing rooftop sign
 
 It needs Google Chrome (or set `CHROME_PATH`) and Node 22+, and nothing else: Chrome renders every frame and encodes H.264 itself, so no ffmpeg is needed. Time inside the page is simulated, so the video is a smooth 30 fps no matter how fast your machine renders.
 
@@ -349,7 +365,9 @@ It needs Google Chrome (or set `CHROME_PATH`) and Node 22+, and nothing else: Ch
 
 It's encoded to AAC (Opus if this Chrome can't do AAC) in the same MP4. To use your own track instead, run `RECORD_MUSIC=/path/to/song.mp3 npm run record-demo`. It's trimmed to the video and faded out at the end; make sure you have the rights to it. `RECORD_MUSIC=none` gives a silent video.
 
-Other options: `RECORD_FPS`, `RECORD_OUT`, and `RECORD_GL` (`metal`, `swiftshader` or `default`).
+Other options: `RECORD_FPS`, `RECORD_OUT`, `RECORD_BITRATE` (video bits per second, 4000000 by default, which keeps the file well under GitHub's 50 MB warning) and `RECORD_GL` (`metal`, `swiftshader` or `default`).
+
+`--stills` saves a frame every 3 seconds. The landing page uses three of them, under fixed names in `site/assets/`: `t03.0.jpg` (the video poster: the whole building), `t14.0.jpg` (a floor with robots) and `t55.0.jpg` (the building at night). After a new recording, copy the frames you like over those three files.
 
 ## Website
 
@@ -360,4 +378,4 @@ The landing page lives in [site/](site/): plain HTML, CSS and JS with no build s
 
 ## License
 
-MIT
+MIT © 2026 Mitchell Scholte. See [LICENSE](LICENSE).

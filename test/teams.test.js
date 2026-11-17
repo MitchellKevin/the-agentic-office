@@ -179,3 +179,35 @@ test('startTask puts hired robots on their department with its role; orgChange c
   const args2 = store.tasks.spawnFn.calls[1].args;
   assert.match(args2[args2.indexOf('--append-system-prompt') + 1], /QA department/);
 });
+
+test('dismiss: idle robots go home until their session does something new; busy ones stay', async () => {
+  let now = Date.now();
+  const store = new Store({ ...cfg, projectsDir: tmp }, { now: () => now });
+  store.tasks.spawnFn = fakeSpawn();
+  store.tasks.find = find;
+  const idle = store.ensureMain('idle-1', '-tmp-proj');
+  idle.cwd = tmp;
+  idle.lastActivity = now - 60_000;
+  const busy = store.ensureMain('busy-1', '-tmp-proj');
+  busy.cwd = tmp;
+  busy.lastActivity = now - 60_000;
+  await startTask(store, { sessionId: busy.id, prompt: 'Keep going' });
+
+  assert.equal(orgChange(store, { op: 'dismiss', projectKey: '-tmp-proj', sessionIds: [] }).code, 400);
+  const r = orgChange(store, { op: 'dismiss', projectKey: '-tmp-proj', sessionIds: [idle.id, busy.id, 'ghost'] });
+  assert.deepEqual(r.dismissed, [idle.id]);
+  assert.deepEqual(r.skipped.map((k) => k.id), [busy.id, 'ghost']);
+  assert.match(r.skipped[0].reason, /task/);
+
+  let sum = store.summary(idle);
+  assert.equal(sum.hidden, true);
+  assert.equal(sum.dismissed, true);
+  assert.equal(store.summary(busy).hidden, false);
+
+  // the session is used again: the robot is back
+  now += 5000;
+  idle.lastActivity = now;
+  sum = store.summary(idle);
+  assert.equal(sum.dismissed, false);
+  assert.equal(sum.hidden, false);
+});

@@ -65,7 +65,7 @@ export class Org extends EventEmitter {
     super();
     this.file = file;
     this.fs = fsImpl;
-    this.data = { version: 1, projects: {} };
+    this.data = { version: 1, projects: {}, dismissed: {} };
     this.saveTimer = null;
     this.load();
   }
@@ -74,7 +74,9 @@ export class Org extends EventEmitter {
     if (!this.file) return;
     try {
       const j = JSON.parse(this.fs.readFileSync(this.file, 'utf8'));
-      if (j && typeof j === 'object' && j.projects && typeof j.projects === 'object') this.data = { version: 1, projects: j.projects };
+      if (j && typeof j === 'object' && j.projects && typeof j.projects === 'object') {
+        this.data = { version: 1, projects: j.projects, dismissed: j.dismissed && typeof j.dismissed === 'object' ? j.dismissed : {} };
+      }
     } catch (e) {
       if (e.code !== 'ENOENT') console.warn(`[agent-office] could not read ${this.file}: ${e.message}. Starting with default departments.`);
     }
@@ -147,6 +149,21 @@ export class Org extends EventEmitter {
     this.changed();
     return { ok: true };
   }
+
+  /**
+   * Sends robots home: they leave the office until their session does something again.
+   * Only the time is stored; transcripts are never touched.
+   */
+  dismiss(sessionIds, at) {
+    const d = (this.data.dismissed ||= {});
+    for (const id of sessionIds) d[id] = at;
+    const keys = Object.keys(d);
+    if (keys.length > MAX_ASSIGN) for (const k of keys.slice(0, keys.length - MAX_ASSIGN)) delete d[k];
+    this.changed();
+  }
+
+  /** When a robot was sent home, or 0. */
+  dismissedAt(sessionId) { return this.data.dismissed?.[sessionId] || 0; }
 
   changed() { this.save(); this.emit('change'); }
 

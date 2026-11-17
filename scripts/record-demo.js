@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Records a short feature video of the demo office: `npm run record-demo` → media/agent-office-demo.mp4
+// Records a short feature video of the demo office: `npm run record-demo` → site/assets/demo.mp4
 //
 // How it works (no dependencies, no ffmpeg):
 //  - serves public/ on a random local port and opens ?demo=1 (simulated agents only, no real data)
@@ -14,6 +14,7 @@
 //    bass, swung drums, vinyl crackle), encoded to AAC and muxed in as a second track.
 //
 // Options (env): CHROME_PATH, RECORD_FPS (30), RECORD_GL (swiftshader|metal|default), RECORD_OUT,
+//   RECORD_BITRATE (video bits per second, 4000000: keeps the MP4 well under GitHub's 50 MB warning),
 //   RECORD_MUSIC: path to your own audio file (mp3/m4a/wav…) to use instead, or "none" for no audio.
 import http from 'node:http';
 import fs from 'node:fs';
@@ -24,11 +25,15 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = path.join(ROOT, 'public');
-const OUT = path.resolve(process.env.RECORD_OUT || path.join(ROOT, 'media', 'agent-office-demo.mp4'));
+// The landing page plays this file, so it is recorded straight into site/ (one copy in the repo).
+const OUT = path.resolve(process.env.RECORD_OUT || path.join(ROOT, 'site', 'assets', 'demo.mp4'));
+// Preview frames are scratch output (media/ is git-ignored); copy the ones the site needs into site/assets/.
+const STILLS = path.join(ROOT, 'media', 'stills');
 const FPS = Number(process.env.RECORD_FPS) || 30;
+const BITRATE = Number(process.env.RECORD_BITRATE) || 4_000_000;
 const VIEW = { width: 1440, height: 810, scale: 4 / 3 }; // → 1920×1080 frames
 const OUT_W = Math.round(VIEW.width * VIEW.scale), OUT_H = Math.round(VIEW.height * VIEW.scale);
-const DURATION = 66; // seconds, an upper bound: recording stops shortly after the end card
+const DURATION = 130; // seconds, an upper bound: recording stops shortly after the end card
 const MUSIC = process.env.RECORD_MUSIC ? (process.env.RECORD_MUSIC === 'none' ? 'none' : path.resolve(process.env.RECORD_MUSIC)) : null;
 if (MUSIC && MUSIC !== 'none' && !fs.existsSync(MUSIC)) { console.error(`RECORD_MUSIC file not found: ${MUSIC}`); process.exit(1); }
 
@@ -261,13 +266,101 @@ const DIRECTOR = String.raw`(() => {
   }
   const sessions = () => [...ao.state.sessions.values()];
 
+  // ---- cinematic camera
+  // Shots write the office camera directly (and keep its own fly-to animation off), so they can
+  // go closer, lower and longer than the app's views. fov narrows for a telephoto look.
+  const O = ao.office;
+  const FOV = O.cam.fov, FLOOR_H = 3.6, LIFT_X = 0.95, LIFT_Z = 1.4;
+  const lerp = (a, b, k) => a + (b - a) * k;
+  const camNow = () => ({ target: [...O.cam.target], dist: O.cam.dist, pitch: O.cam.pitch, yaw: O.cam.yaw, fov: O.cam.fov });
+  function setCam(c) { O.camAnim = null; O.userMoved = true; Object.assign(O.cam, c, { target: [...c.target] }); }
+  // Move the camera to "to" (any of target/dist/pitch/yaw/fov). linear: a constant-speed drift.
+  async function shot(to, ms, linear = false) {
+    const a = camNow(), b = { ...a, ...to };
+    await tween(ms, (e, k) => {
+      const t = linear ? k : e;
+      setCam({ target: a.target.map((v, i) => lerp(v, b.target[i], t)), dist: lerp(a.dist, b.dist, t), pitch: lerp(a.pitch, b.pitch, t), yaw: lerp(a.yaw, b.yaw, t), fov: lerp(a.fov, b.fov, t) });
+    });
+  }
+  // Keep a moving thing in frame: the target eases after where(), the rest drifts to "to".
+  async function follow(where, ms, to = {}, until = () => false) {
+    const a = camNow(), b = { ...a, ...to };
+    const t0 = performance.now();
+    for (;;) {
+      const k = Math.min(1, (performance.now() - t0) / ms), e = ease(Math.min(1, k * 2.5));
+      const p = where();
+      const tgt = p ? O.cam.target.map((v, i) => lerp(v, p[i], 0.12)) : O.cam.target;
+      setCam({ target: tgt, dist: lerp(a.dist, b.dist, e), pitch: lerp(a.pitch, b.pitch, e), yaw: lerp(a.yaw, b.yaw, k), fov: lerp(a.fov, b.fov, e) });
+      if (k >= 1 || until()) return;
+      await frame();
+    }
+  }
+  // The app's own view for the current floor/building, back at the normal lens.
+  function appView(ms = 1100) { O.cam.fov = FOV; O.flyTo(O.viewCamera(), ms / 1000); return sleep(ms); }
+  const worldPos = (node) => node && node.world ? [node.world[12], node.world[13], node.world[14]] : null;
+  const robot = (id) => O.people.get(id);
+  const robotHead = (p, up = 1.0) => { const w = p && worldPos(p.group); return w && [w[0], w[1] + up, w[2]]; };
+  const traveller = () => [...O.people.values()].find((p) => p.trip);
+  const cabPos = () => { const w = worldPos(O.cab); return w && [O.dims.W + LIFT_X, w[1] + 1.3, LIFT_Z]; };
+  // A three-quarter close-up on a robot's face (robots face along their yaw).
+  const closeUpCam = (p, side = 0.7, up = 1.0) => { const h = robotHead(p, up); return h && { target: h, dist: 2.7, pitch: 0.3, yaw: p.yaw + side, fov: 0.48 }; };
+  async function closeUp(p, ms, side, up) { const c = closeUpCam(p, side, up); if (c) await shot(c, ms); }
+
+  // ---- letterbox + clean frame for the cinematic parts
+  const UI = ['.console', '#floors', '#floorBar', '.zoom', '.legend'].map((s) => $(s)).filter(Boolean);
+  const bars = ['top', 'bottom'].map((side) => {
+    const b = document.createElement('div');
+    b.style.cssText = 'position:fixed;left:0;right:0;height:0;background:#000;z-index:99980;pointer-events:none;' + side + ':0';
+    document.body.append(b); return b;
+  });
+  let cine = false;
+  async function cinema(on, ms = 600) {
+    if (on === cine) return; cine = on;
+    await tween(ms, (k) => {
+      const v = on ? k : 1 - k;
+      for (const b of bars) b.style.height = (v * 9) + 'vh';
+      for (const el of UI) el.style.opacity = String(1 - v);
+    });
+    for (const el of UI) el.style.visibility = on ? 'hidden' : '';
+  }
+  // A dip to black, for hard cuts between shots.
+  const dip = document.createElement('div');
+  dip.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;z-index:99985;pointer-events:none';
+  document.body.append(dip);
+  // c: the new camera, or a function run while the screen is black that returns it.
+  async function cut(c, ms = 260) {
+    await tween(ms, (k) => { dip.style.opacity = String(k); });
+    if (typeof c === 'function') c = c();
+    setCam({ ...camNow(), ...(c || {}) });
+    await frame();
+    await tween(ms, (k) => { dip.style.opacity = String(1 - k); });
+  }
+
   async function run() {
     const F = 'demo-storefront';
     const DEV = 'development';
-    // 1 — the building
-    await sleep(400);
+    // 1 — the building: open at street level on the entrance sign, crane up the facade to the
+    //     rooftop sign, then pull back to the whole building as the UI fades in
+    let { W, D, N } = O.dims;
+    let roofY = (N + 1) * FLOOR_H;
+    for (const el of UI) el.style.opacity = '0';
+    for (const b of bars) b.style.height = '9vh';
+    cine = true;
+    cur.style.opacity = '0';
+    dip.style.opacity = '1';
+    setCam({ target: [W / 2, 2.6, D], dist: 10, pitch: 0.06, yaw: 0.32, fov: 0.42 });
+    await sleep(100);
+    tween(700, (k) => { dip.style.opacity = String(1 - k); });
+    await shot({ dist: 7, yaw: 0.12 }, 2400, true);
+    // crane up while pulling back, so the whole glass facade passes by rather than one floor
+    await shot({ target: [W / 2, roofY * 0.55, D], dist: 26, pitch: 0.12, yaw: 0.02, fov: 0.5 }, 1900);
+    await shot({ target: [W / 2, roofY + 2.4, D - 0.6], dist: 15, pitch: 0.1, yaw: -0.08, fov: 0.46 }, 1900);
+    await sleep(300);
     caption('Agent Office', 'Every project is a building, every Claude Code agent a robot inside');
-    await orbit(0.55, 6200);
+    cinema(false, 900);
+    tween(900, (k) => { cur.style.opacity = String(k); });
+    await appView(2400);
+    await orbit(0.3, 2600);
 
     // 2 — floors
     caption('One floor per department', 'Development, Design, QA… with live status right on the facade');
@@ -282,8 +375,26 @@ const DIRECTOR = String.raw`(() => {
     // 3 — robots
     caption('Every session is a robot', 'Working, waiting for you, your turn or idle: you see it at a glance');
     await moveTo(innerWidth * 0.55, innerHeight * 0.5, 900);
-    await orbit(-0.28, 4200);
-    await sleep(600);
+    // close-ups: a robot typing at its monitor, then one waving because it needs you
+    // (the typing robot may be on another floor: the view switches to it without a fly-over)
+    const busyS = O.sessions.find((s) => s.dept === DEV && s.status === 'working') || O.sessions.find((s) => s.status === 'working' && robot(s.id) && !robot(s.id).trip);
+    const needyS = O.sessions.find((s) => s.dept === DEV && s.status === 'needs_you') || O.sessions.find((s) => s.status === 'needs_you');
+    const onFloor = (s) => { O.view = { mode: 'floor', key: s.dept }; O.emitFloors(); };
+    if (busyS || needyS) {
+      cur.style.opacity = '0';
+      await cinema(true, 500);
+      if (busyS) { onFloor(busyS); await closeUp(robot(busyS.id), 1500, 0.9); await shot({ dist: 2.3, yaw: O.cam.yaw + 0.35 }, 2400, true); }
+      if (needyS) {
+        if (busyS) await cut(() => { onFloor(needyS); return closeUpCam(robot(needyS.id), -0.6, 1.25); }, 220);
+        else { onFloor(needyS); await closeUp(robot(needyS.id), 1500, -0.6, 1.25); }
+        await shot({ dist: 2.4, yaw: O.cam.yaw + 0.3 }, 2400, true);
+      }
+      cinema(false, 700);
+      O.view = { mode: 'floor', key: DEV }; O.emitFloors();
+      await appView(1300);
+      cur.style.opacity = '1';
+    } else { await orbit(-0.28, 4200); }
+    await sleep(400);
 
     // 4 — branches
     caption('Branches get their own zone', 'Pick a branch and the camera flies to its robots');
@@ -298,8 +409,12 @@ const DIRECTOR = String.raw`(() => {
 
     // 5 — conversation + message box
     caption('Talk to any robot', 'Read its conversation and give it the next task, right from the panel');
-    const free = sessions().find((s) => s.projectKey === F && (s.status === 'your_turn' || s.status === 'idle'))
-      || sessions().find((s) => s.status === 'your_turn' || s.status === 'idle');
+    // Stay in this building: a robot from another project would switch the whole view over.
+    let free = null;
+    for (let k = 0; k < 30 && !free; k++) {
+      free = sessions().find((s) => s.projectKey === F && (s.status === 'your_turn' || s.status === 'idle'));
+      if (!free) await sleep(100);
+    }
     if (free) {
       ao.office.focusSession(free.id);
       await sleep(900);
@@ -320,6 +435,7 @@ const DIRECTOR = String.raw`(() => {
     } else await sleep(4000);
 
     // 6 — new task on a new branch
+    if (O.project && O.project.key !== F) { ao.setProject(F); await sleep(900); } // back to the storefront building
     caption('Start agents on any branch', 'Each branch runs in its own git worktree, so agents never collide');
     await click($('#fbTask'), 800);
     for (let k = 0; k < 40 && $('#tBranchRow').hidden; k++) await sleep(50); // branch list loads async
@@ -355,11 +471,33 @@ const DIRECTOR = String.raw`(() => {
     await sleep(600);
     ao.teamDrawer.toggle(false);
     ao.office.showFloor('product');
-    await sleep(7200);              // Product takes its turn, then gets up and walks to the lift
-    ao.office.showBuilding();
-    await sleep(4200);              // the ride up, seen from outside
-    ao.office.showFloor('design');
-    await sleep(6500);              // "Spec is ready…" — "On it!"
+    await sleep(1300);
+    cur.style.opacity = '0';
+    await cinema(true, 500);
+    // Product takes its turn: close on its robot until it gets up for the lift
+    const prod = robot((O.sessions.find((s) => s.dept === 'product' && s.status === 'working') || O.sessions.find((s) => s.dept === 'product') || {}).id);
+    if (prod) { await closeUp(prod, 1400, 0.9); await follow(() => robotHead(prod), 4200, { dist: 2.4, yaw: O.cam.yaw + 0.3 }, () => !!prod.trip); }
+    else await sleep(4000);
+    for (let k = 0; k < 40 && !traveller(); k++) await sleep(100);
+    // follow the Product robot itself (other robots may be riding the lift too)
+    let tr = prod && prod.trip ? prod : traveller();
+    const stage = () => (tr && tr.trip ? tr.trip.stage : null);
+    const atLift = () => ['waitLift', 'board', 'ride'].includes(stage());
+    // a high tracking shot as it walks to the lift (high, so the walls never get in the way)
+    if (tr) await follow(() => robotHead(tr, 0.8), 9000, { dist: 8, pitch: 0.95, yaw: Math.PI / 4 + 0.3, fov: 0.55 }, atLift);
+    // the lift arriving and the ride up, from outside the glass shaft, with the facade beside it
+    O.view = { mode: 'building', key: null }; O.emitFloors();
+    await cut(() => ({ target: cabPos() || O.cam.target, dist: 17, pitch: 0.14, yaw: Math.PI / 2 + 0.55, fov: 0.6 }), 200);
+    await follow(cabPos, 10000, { dist: 15, yaw: Math.PI / 2 + 0.35 }, () => !atLift());
+    // in on the floor it went to, for the hand-over: "Spec is ready…" — "On it!"
+    const dest = (tr && tr.lvl && !tr.lvl.lobby && tr.lvl.key) || 'design';
+    O.view = { mode: 'floor', key: dest }; O.emitFloors();
+    await cut(() => ({ target: robotHead(tr, 0.8) || O.cam.target, dist: 7.5, pitch: 0.85, yaw: Math.PI / 4 - 0.2, fov: 0.55 }), 200);
+    await follow(() => robotHead(tr, 0.8), 6500, { dist: 6, pitch: 0.75, yaw: Math.PI / 4 + 0.25 });
+    cinema(false, 600);
+    O.showFloor(dest);
+    await sleep(900);
+    cur.style.opacity = '1';
 
     // 8 — approvals
     caption('Approve from the browser', 'Permission requests land in one place: Allow or Deny');
@@ -378,10 +516,16 @@ const DIRECTOR = String.raw`(() => {
     await moveTo(innerWidth - 150, 30, 900);
     await sleep(700);
     await setHour(10.5, 21.5, 4200);
-    await moveTo(innerWidth * 0.7, innerHeight * 0.75, 900);
-    await orbit(0.35, 4200);
-    await sleep(800);
+    await sleep(400);
+    cur.style.opacity = '0';
+    // a low sweep through the lit-up streets, rising to the glowing sign on the roof
+    ({ W, D, N } = O.dims); roofY = (N + 1) * FLOOR_H; // new robots may have grown the building
+    cinema(true, 700);
+    await cut({ target: [W / 2, 3, D + 6], dist: 34, pitch: 0.05, yaw: Math.PI / 4 + 0.75, fov: 0.5 }, 300);
+    await shot({ yaw: Math.PI / 4 - 0.1, dist: 30, target: [W / 2, roofY * 0.5, D / 2] }, 4200, true);
     await hideCaption();
+    await shot({ target: [W / 2, roofY + 2.4, D - 0.6], dist: 13, pitch: 0.14, yaw: 0.05, fov: 0.44 }, 3000);
+    await sleep(900);
 
     // 10 — end card
     const end = document.createElement('div'); end.className = 'rec-end'; end.style.opacity = '0';
@@ -400,9 +544,9 @@ const DIRECTOR = String.raw`(() => {
 const ENCODER_HTML = String.raw`<!doctype html><meta charset="utf-8"><title>encoder</title><script>
 let enc, cfg, desc = null, fps = 30, W = 0, H = 0, err = null;
 const samples = [];
-window.__init = async (w, h, f) => {
+window.__init = async (w, h, f, bitrate) => {
   W = w; H = h; fps = f;
-  const base = { width: w, height: h, bitrate: 14_000_000, framerate: f, avc: { format: 'avc' } };
+  const base = { width: w, height: h, bitrate, framerate: f, avc: { format: 'avc' } };
   // Constrained baseline: no B-frames, so samples are in presentation order (no ctts box needed).
   for (const codec of ['avc1.42e028', 'avc1.42e02a', 'avc1.42001f']) {
     for (const hardwareAcceleration of ['prefer-software', 'no-preference']) {
@@ -773,9 +917,9 @@ async function stills(base) {
   const audioBytes = await page.eval(`new Promise(async (res) => { const v = document.querySelector('video'); v.currentTime = 20;
     try { await v.play(); } catch {} setTimeout(() => { v.pause(); res(v.webkitAudioDecodedByteCount || 0); }, 2500); })`, true);
   console.log(`Plays fine: ${info.d.toFixed(1)}s, ${info.w}×${info.h}, audio ${audioBytes > 0 ? `decoding (${Math.round(audioBytes / 1024)} KB in 2.5s)` : 'none'}`);
-  const dir = path.join(path.dirname(OUT), 'stills');
+  const dir = STILLS;
   fs.mkdirSync(dir, { recursive: true });
-  const times = [3, 9.5, 14, 19, 27, 34, 41, 49, 55, info.d - 0.5].filter((t) => t < info.d);
+  const times = [...Array(Math.floor(info.d / 3)).keys()].map((i) => 1.5 + i * 3).concat(info.d - 0.5).filter((t) => t < info.d);
   for (const t of times) {
     await page.eval(`new Promise((res) => { const v = document.querySelector('video'); v.onseeked = () => requestAnimationFrame(() => requestAnimationFrame(res)); v.currentTime = ${t}; })`, true);
     const shot = await page.send('Page.captureScreenshot', { format: 'jpeg', quality: 80 });
@@ -822,7 +966,7 @@ async function main() {
   console.log(`Recording ${DURATION}s at ${FPS} fps, ${OUT_W}×${OUT_H} (GL: ${gl})…`);
 
   const encoder = await browser.cdp.page(`${base}/encoder.html`, {});
-  const codec = await encoder.eval(`__init(${OUT_W}, ${OUT_H}, ${FPS})`, true);
+  const codec = await encoder.eval(`__init(${OUT_W}, ${OUT_H}, ${FPS}, ${BITRATE})`, true);
   console.log(`  encoder: ${codec}`);
 
   await app.eval(DIRECTOR);

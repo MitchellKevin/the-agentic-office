@@ -334,9 +334,12 @@ export class Store extends EventEmitter {
 
     const lastSeen = Math.max(s.lastActivity ?? 0, hook?.ts ?? 0);
     const hideMs = this.cfg.hideOlderThanHours * 3600_000;
+    // Sent home: gone from the office until the session does something new.
+    const sentHome = this.org.dismissedAt(s.id);
+    const dismissed = !task && sentHome > 0 && lastSeen <= sentHome;
     const hidden = !task && (c.status !== 'needs_you' && now - lastSeen > hideMs) ||
       (c.status === 'ended' && now - (hook?.ts ?? 0) > ENDED_LINGER_MS) ||
-      (!s.lastActivity && !hook);
+      (!s.lastActivity && !hook) || dismissed;
 
     const files = filesChanged(s);
     const errors = s.steps.reduce((n, st) => n + (st.status === 'error' ? 1 : 0), 0);
@@ -375,6 +378,7 @@ export class Store extends EventEmitter {
       pending,
       task: task ? task.id : null,
       hidden,
+      dismissed,
     };
   }
 

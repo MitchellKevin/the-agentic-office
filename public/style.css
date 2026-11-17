@@ -613,6 +613,8 @@ i.d.w { background: var(--working); } i.d.n { background: var(--needs); }
 .dept-add { flex: 1; text-align: left; border: 0; background: transparent; cursor: pointer; padding: 6px; border-radius: 8px; font-size: 12.5px; font-weight: 600; color: var(--accent); }
 .dept-add:hover { background: var(--panel-2); }
 .dept-add:disabled, .dept-edit:disabled { opacity: .45; cursor: default; }
+.home-btn:disabled { opacity: .45; cursor: default; }
+.home-btn:not(:disabled):hover { border-color: #e2b23a; }
 .dept-pick { display: inline-flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .dept-pick select { height: 26px; font: inherit; font-size: 12px; color: var(--text); background: var(--panel-2); border: 1px solid var(--border); border-radius: 7px; padding: 0 6px; cursor: pointer; }
 @media (max-width: 900px) {

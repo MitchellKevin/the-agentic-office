@@ -61,6 +61,19 @@ test('the org file is written atomically and read back', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('sending robots home is remembered with its time, and saved', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-org-'));
+  const file = path.join(dir, 'org.json');
+  const a = new Org(file);
+  assert.equal(a.dismissedAt('s1'), 0);
+  a.dismiss(['s1', 's2'], 1000);
+  assert.equal(a.dismissedAt('s1'), 1000);
+  a.saveNow();
+  clearTimeout(a.saveTimer); a.saveTimer = null;
+  assert.equal(new Org(file).dismissedAt('s2'), 1000);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('an unreadable org file falls back to defaults', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ao-org-'));
   const file = path.join(dir, 'org.json');

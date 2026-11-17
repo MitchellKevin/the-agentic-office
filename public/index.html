@@ -88,6 +88,7 @@
     <div class="floors-list" id="floorsList" role="list"></div>
     <div class="floors-foot">
       <button class="dept-add" id="deptAdd" type="button">＋ Add department</button>
+      <button class="dept-edit icon-btn" id="cleanBtn" type="button" title="Clean up: send the idle robots in this building home by taxi" aria-label="Clean up idle robots">🚕</button>
       <button class="dept-edit icon-btn" id="deptEdit" type="button" title="Edit departments: names, roles and floor order" aria-label="Edit departments">✎</button>
     </div>
   </nav>
@@ -142,6 +143,7 @@
           <select id="pDept" aria-label="Department"></select>
         </label>
       </div>
+      <button class="tool-btn give-btn home-btn" id="pHome" title="Send this robot home by taxi. Its transcript stays on disk; it comes back if the session is used again.">🚕 Send home</button>
       <button class="tool-btn give-btn" id="pTask" title="Give this robot a task (T)">Give task</button>
       <button class="icon-btn" id="pClose" aria-label="Close panel">✕</button>
     </div>

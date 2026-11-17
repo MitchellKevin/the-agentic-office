@@ -1,3 +1,6 @@
 node_modules/
 *.bak
 .DS_Store
+.vscode/
+# scratch output of `npm run record-demo -- --stills`; the video itself lives in site/assets/
+media/

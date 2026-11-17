@@ -177,7 +177,7 @@ export function demoSource() {
     s.steps = s._steps.length;
     s.errors = s._steps.filter((x) => x.status === 'error').length;
     s.files = s._files.size;
-    const { _steps, _convo, _files, _next, _task, _teamUntil, ...rest } = s;
+    const { _steps, _convo, _files, _next, _task, _teamUntil, _dismissed, ...rest } = s;
     return { ...rest, task: _task || null, tokens: { ...s.tokens }, context: { ...s.context }, interns: s.interns.map((i) => ({ ...i })) };
   }
 
@@ -202,6 +202,22 @@ export function demoSource() {
     for (const s of sessions) if (s.projectKey === key && !ids.has(s.dept)) { s.dept = out[0].id; h.session(summary(s)); }
     h.org(orgView());
     return { ok: true };
+  }
+
+  function dismiss(key, ids) {
+    const dismissed = [], skipped = [];
+    for (const id of ids || []) {
+      const s = sessions.find((x) => x.id === id && x.projectKey === key);
+      const run = s?.team && teams.find((r) => r.id === s.team);
+      const reason = !s ? 'Unknown robot.' : s._task ? 'It is on a task. Stop the task first.' : s.status === 'working' ? 'It is working.'
+        : s.status === 'needs_you' ? 'It is waiting on you.' : run?.status === 'running' ? 'It is part of a team that is still working.' : null;
+      if (reason) { skipped.push({ id, reason }); continue; }
+      s._dismissed = true; s.hidden = true; s.dismissed = true;
+      dismissed.push(id);
+      h.session(summary(s));
+    }
+    h.counters(counters());
+    return { dismissed, skipped };
   }
 
   function assign(key, sessionId, dept) {
@@ -350,7 +366,7 @@ export function demoSource() {
   function tick() {
     const t = now();
     for (const s of sessions) {
-      if (s.status === 'idle' || t < s._next) continue;
+      if (s.status === 'idle' || s._dismissed || t < s._next) continue;
       // Team robots work their turn, hand over, and then wait for the next one.
       if (s._teamUntil) {
         finishTool(s);
@@ -431,6 +447,8 @@ export function demoSource() {
       if (!s) return { error: 'Unknown robot.' };
       if (s.status === 'working') return { error: 'This robot is busy. Wait until it is your turn.' };
       if (s.status === 'needs_you') return { error: 'This robot is waiting on you. Answer it first.' };
+      // A robot that was sent home comes back to work.
+      s._dismissed = false; s.dismissed = false; s.hidden = false;
     } else {
       const p = PROJECTS.find((x) => x.key === projectKey);
       if (!p) return { error: 'No known folder for that building yet.' };
@@ -507,6 +525,7 @@ export function demoSource() {
     async stopTask(id) { finishTask(id, 'stopped'); return true; },
     async setDepartments(key, list) { return setDepartments(key, list); },
     async assign(key, sessionId, dept) { return assign(key, sessionId, dept); },
+    async dismiss(key, ids) { return dismiss(key, ids); },
     async startTeam(body) { return startTeam(body); },
     async stopTeam(id) { return stopTeam(id); },
   };

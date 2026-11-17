@@ -149,6 +149,7 @@ const panel = new Panel(source, {
     if (r.error) toast(esc(r.error), { kind: 'bad' });
     else toast(`Moving to ${esc(departmentsOf(state.org, s.projectKey).find((d) => d.id === dept)?.name || dept)}: the robot takes the lift.`, { ms: 3500 });
   },
+  onSendHome: (id) => sendHome([id]),
 });
 const drawer = new Drawer(source);
 drawer.onOpen = (id) => select(id);
@@ -212,6 +213,46 @@ function renderProjects(list) {
   if (state.project) projectSel.value = state.project;
 }
 projectSel.addEventListener('change', () => { setProject(projectSel.value); renderNow(); projectSel.blur(); });
+
+// ---------- sending robots home (by taxi) ----------
+// The robots leave straight away; the server then hides their sessions until they do something
+// new. Nothing is deleted. If the server says no, the robots turn round and go back to work.
+async function sendHome(ids) {
+  const key = state.project;
+  const list = ids.map((id) => state.sessions.get(id)).filter((s) => s && s.projectKey === key);
+  if (!list.length) return;
+  for (const s of list) office?.sendHome(s.id);
+  if (panel.openId && list.some((s) => s.id === panel.openId)) panel.close();
+  const r = await source.dismiss(key, list.map((s) => s.id));
+  if (r.error) {
+    for (const s of list) office?.comeBack(s.id);
+    toast(esc(r.error), { kind: 'bad' });
+    return;
+  }
+  for (const k of r.skipped || []) office?.comeBack(k.id);
+  const n = r.dismissed?.length || 0;
+  if (n) toast(n === 1 ? 'A robot is on its way home by taxi. It comes back if its session is used again.' : `${n} robots are on their way home by taxi.`, { ms: 4500 });
+  if (r.skipped?.length) {
+    const why = [...new Set(r.skipped.map((k) => k.reason))].join(' ');
+    toast(`${r.skipped.length === 1 ? 'A robot stayed' : `${r.skipped.length} robots stayed`}: ${esc(why)}`, { kind: 'bad', ms: 7000 });
+  }
+}
+
+/** Robots that can go home in a clean-up: nothing has happened for a while (idle) or the session ended. */
+function idleRobots() {
+  return visibleSessions().filter((s) => s.projectKey === state.project && (s.status === 'idle' || s.status === 'ended') && !s.task);
+}
+
+$('#cleanBtn').addEventListener('click', () => {
+  const list = idleRobots();
+  const name = currentProject()?.name || 'this building';
+  if (!list.length) {
+    toast(`No idle robots in ${esc(name)}. To send a robot home that isn't idle yet, open it and press <b>🚕 Send home</b>.`, { ms: 6000 });
+    return;
+  }
+  const ok = confirm(`Send ${list.length} idle robot${list.length === 1 ? '' : 's'} in ${name} home by taxi?\n\nThey leave the office. Their transcripts stay on disk, and a robot comes back as soon as its session is used again.`);
+  if (ok) sendHome(list.map((s) => s.id));
+});
 
 // ---------- departments ----------
 const deptDlg = new DeptDialog(source, () => ({ org: state.org, project: state.project, projectName: currentProject()?.name }));
@@ -493,7 +534,7 @@ function renderNow() {
   if (!projects.some((p) => p.key === state.project) && projects.length) state.project = mostRecent(projects).key;
   const cur = projects.find((p) => p.key === state.project) || null;
   renderProjects(projects);
-  $('#deptAdd').disabled = $('#deptEdit').disabled = !cur;
+  $('#deptAdd').disabled = $('#deptEdit').disabled = $('#cleanBtn').disabled = !cur;
   $('#teamBtn').disabled = !cur;
   office?.setProject(cur ? { key: cur.key, name: cur.name, repo: cur.repo, departments: departmentsOf(state.org, cur.key) } : null);
   office?.setSessions(vis.filter((s) => s.projectKey === state.project));
@@ -501,7 +542,8 @@ function renderNow() {
   const hiddenCount = [...state.sessions.values()].filter((s) => s.hidden && s.status !== 'ended').length;
   const hb = $('#hiddenBtn');
   hb.hidden = !hiddenCount && !state.showHidden;
-  hb.textContent = state.showHidden ? 'Hide older sessions' : `Show ${hiddenCount} older session${hiddenCount === 1 ? '' : 's'}`;
+  // Hidden: older sessions, and robots you sent home.
+  hb.textContent = state.showHidden ? 'Hide older and sent-home sessions' : `Show ${hiddenCount} hidden session${hiddenCount === 1 ? '' : 's'}`;
   if (office) {
     $('#empty').hidden = vis.length > 0;
     $('#emptyHours').textContent = state.config.hideOlderThanHours ?? 12;

@@ -212,6 +212,8 @@ export class Office {
     this.interns = new Map();
     this.project = null;         // { key, name, departments: [{ id, name }] }
     this.pendingSays = [];       // speech for robots that haven't walked in yet
+    this.gone = new Map();       // robots that left by taxi: id -> time, so they don't pop back in
+    this.taxi = null;            // the taxi at the rank in front of the building, when one is coming
     const self = this;
     this.lobbyLvl = { key: '__lobby', name: 'Lobby', index: -1, oy: 0, lobby: true, get node() { return self.lobby; }, get liftDoors() { return self.lobbyDoors; } };
     this.resetLift();
@@ -294,6 +296,50 @@ export class Office {
     ]);
   }
 
+  /**
+   * Sends a robot home: it says goodbye, takes the lift down, walks out of the front door and
+   * gets into a taxi at the rank. Returns false if there's no such robot (or it's already going).
+   */
+  sendHome(id) {
+    const p = this.people.get(id);
+    if (!p || p.leaving) return false;
+    p.leaving = true;
+    p.queue = [];
+    p.cup = false;
+    p.say = { text: 'Bye, everyone!', until: this.t + 2.6, kind: 'say' };
+    if (this.selected === id) this.selected = null;
+    if (p.trip) {
+      const t = p.trip;
+      t.stops = [...t.stops.slice(0, t.i), { taxi: true }];
+      if (t.stage !== 'ride' && t.stage !== 'board' && t.stage !== 'alight') this.startStop(p);
+    } else {
+      this.plan(p, [{ taxi: true }]);
+    }
+    return true;
+  }
+
+  /** The server said no: the robot turns round and goes back to its desk. */
+  comeBack(id) {
+    this.gone.delete(id);
+    const p = this.people.get(id);
+    if (!p?.leaving) return;
+    p.leaving = false;
+    p.say = { text: 'Oh, I\'m staying after all.', until: this.t + 3, kind: 'say' };
+    const t = p.trip;
+    if (!t) return;
+    t.stops = [...t.stops.slice(0, t.i), { home: true }];
+    if (t.stage !== 'ride' && t.stage !== 'board' && t.stage !== 'alight') this.startStop(p);
+  }
+
+  /** Takes a robot out of the building for good (it got into the taxi). */
+  removePerson(p) {
+    p.group.detach(); p.deskNode?.detach();
+    p.label?.remove(); p.moreLabel?.label?.remove(); p.talkHolder?.label?.remove();
+    this.lift.riders.delete(p);
+    this.people.delete(p.id);
+    this.gone.set(p.id, this.t);
+  }
+
   /** A speech bubble over a robot for a few seconds. Waits up to a minute for robots not here yet. */
   queueSay(id, text, secs = 5, kind = 'say') {
     const p = this.people.get(id);
@@ -345,6 +391,9 @@ export class Office {
     for (const it of this.interns.values()) { it.group.detach(); it.label?.remove(); }
     this.floors.clear(); this.people.clear(); this.interns.clear();
     this.pendingSays = [];
+    this.gone.clear();
+    this.taxi?.node.detach();
+    this.taxi = null;
     this.recSay = null;
     this.structSig = '';
     this.resetLift();
@@ -486,7 +535,10 @@ export class Office {
     // A robot whose department no longer exists works on the first floor.
     const deps = this.project?.departments?.length ? this.project.departments : [{ id: 'general', name: 'General' }];
     const byRoom = new Map(deps.map((d) => [d.id, { key: d.id, name: d.name, sessions: [] }]));
-    for (const s of this.sessions) (byRoom.get(s.dept) || byRoom.get(deps[0].id)).sessions.push(s);
+    for (const s of this.sessions) {
+      if (this.gone.has(s.id)) continue; // drove off in a taxi; the server catches up in a moment
+      (byRoom.get(s.dept) || byRoom.get(deps[0].id)).sessions.push(s);
+    }
     this.floorOrder = deps.map((d) => d.id);
     const specs = this.floorOrder.map((k) => byRoom.get(k));
 
@@ -532,6 +584,7 @@ export class Office {
       this.lobby = this.buildLobby(W, D); this.world.add(this.lobby);
       this.roof = this.buildRoof(W, D); this.world.add(this.roof);
       this.cab = this.buildCab(W); this.world.add(this.cab);
+      if (this.taxi) this.world.add(this.taxi.node);
       for (const f of this.floors.values()) { f.shellSig = null; this.world.add(f.node); }
       // Robots in the lift or the lobby move over to the rebuilt ones.
       for (const p of this.people.values()) {
@@ -579,11 +632,16 @@ export class Office {
     }
     const live = new Set(this.sessions.map((s) => s.id));
     for (const [id, p] of this.people) {
-      if (live.has(id)) continue;
+      if (live.has(id) && !this.gone.has(id)) continue;
+      // On its way to the taxi: its desk goes, the robot stays until it gets in.
+      if (p.leaving) { p.deskNode?.detach(); p.deskNode = null; continue; }
       p.group.detach(); p.deskNode?.detach(); p.label?.remove(); p.moreLabel?.label?.remove(); p.talkHolder?.label?.remove();
       this.lift.riders.delete(p);
       this.people.delete(id);
     }
+    // Once the server has them hidden too, forget the robots that left.
+    // (With "show hidden sessions" on they stay in the list: let them walk back in after a while.)
+    for (const [id, at] of this.gone) if (!live.has(id) || this.t - at > 20) this.gone.delete(id);
     // A department went away under the lift: it heads for the nearest real stop again.
     const L = this.lift;
     if (L.at && !this.isLevel(L.at)) { L.at = null; L.door = 0; L.state = 'idle'; }
@@ -773,6 +831,94 @@ export class Office {
     return g;
   }
 
+  // ---------- the taxi ----------
+  /** Where taxis stop: the kerb lane in front of the entrance. Cars face +x, so a taxi heading -x has its left side to the kerb. */
+  taxiRank(W = this.dims.W, D = this.dims.D) { return { x: W / 2 + 0.5, z: D + 5.35, lane: D + 6.5 }; }
+
+  /** A yellow cab with a roof sign, built facing +x like the city's cars. */
+  buildTaxi() {
+    const g = new Node();
+    const paint = { color: lin('#f2c230'), spec: 0.8, shine: 80 };
+    const glass = { color: lin(this.dark ? '#1b2330' : '#2d3a48'), spec: 1, shine: 90 };
+    const black = { color: [0.03, 0.03, 0.03] };
+    g.add(this.box(paint, 0, 0.42, 0, 2.3, 0.5, 1.04));
+    g.add(this.box(glass, -0.1, 0.83, 0, 1.25, 0.36, 0.94));
+    g.add(this.box(paint, -0.1, 1.03, 0, 1.15, 0.06, 0.92));
+    for (const s of [-1, 1]) g.add(this.box(black, 0, 0.5, s * 0.522, 2.0, 0.07, 0.01));
+    const sign = this.dark ? { color: [3, 2.5, 1.1], unlit: true, noShadow: true } : { color: lin('#fff3c4'), emissive: [0.25, 0.22, 0.12] };
+    g.add(this.box(sign, -0.1, 1.15, 0, 0.24, 0.16, 0.5));
+    for (const [wx, wz] of [[-0.72, 0.5], [0.72, 0.5], [-0.72, -0.5], [0.72, -0.5]]) g.add(this.cyl(black, wx, 0.2, wz, 0.2, 0.16).turn(Math.PI / 2, 0, 0));
+    const head = this.dark ? { color: [3, 2.8, 2], unlit: true } : { color: [0.92, 0.92, 0.88] };
+    for (const s of [-1, 1]) {
+      g.add(this.box(head, 1.155, 0.48, s * 0.32, 0.02, 0.1, 0.18));
+      g.add(this.box({ color: [0.7, 0.05, 0.04], unlit: this.dark }, -1.155, 0.5, s * 0.32, 0.02, 0.08, 0.16));
+    }
+    return g;
+  }
+
+  /**
+   * One taxi at a time: it is called when a robot waits at the rank, drives up the kerb lane,
+   * pulls in, waits while the robots get in, and drives off down the street.
+   */
+  updateTaxi(dt) {
+    const people = [...this.people.values()];
+    const waiting = people.filter((p) => p.trip?.stage === 'taxiWait');
+    const boarding = people.filter((p) => p.trip?.stage === 'taxiBoard');
+    const rank = this.taxiRank();
+    let T = this.taxi;
+    if (!T) {
+      if (!waiting.length) return;
+      T = this.taxi = {
+        node: this.buildTaxi(), state: 'arrive', pos: { x: rank.x + 75, z: rank.lane }, yaw: Math.PI, age: 0, timer: 0,
+        path: [{ x: rank.x + 8, z: rank.lane }, { x: rank.x + 3, z: rank.z }, { x: rank.x, z: rank.z }],
+      };
+      this.world.add(T.node);
+    }
+    T.age += dt;
+    if (T.state === 'arrive' || T.state === 'leave') {
+      let left = 0, prev = T.pos;
+      for (const q of T.path) { left += Math.hypot(q.x - prev.x, q.z - prev.z); prev = q; }
+      const v = T.state === 'arrive' ? Math.min(11, 0.8 + left * 0.9) : Math.min(11, 0.8 + T.timer * 4);
+      if (T.state === 'leave') T.timer += dt;
+      let step = v * dt;
+      while (step > 0 && T.path.length) {
+        const q = T.path[0], dx = q.x - T.pos.x, dz = q.z - T.pos.z, d = Math.hypot(dx, dz);
+        if (d > 1e-4) T.want = Math.atan2(-dz, dx);
+        if (d <= step) { T.pos = { ...q }; T.path.shift(); step -= d; } else { T.pos.x += (dx / d) * step; T.pos.z += (dz / d) * step; step = 0; }
+      }
+      if (T.want != null) T.yaw = angleLerp(T.yaw, T.want, Math.min(1, dt * 5));
+      if (!T.path.length) {
+        if (T.state === 'arrive') { T.state = 'stopped'; T.timer = 0; T.want = Math.PI; }
+        else { T.node.detach(); this.taxi = null; return; }
+      }
+    } else if (T.state === 'stopped') {
+      T.timer += dt;
+      T.yaw = angleLerp(T.yaw, Math.PI, Math.min(1, dt * 5));
+      // Everyone at the rank gets in through the kerb-side door.
+      for (const p of waiting) {
+        p.trip.stage = 'taxiBoard';
+        p.path = [{ x: rank.x + 0.25, z: rank.z - 1.2 }];
+        p.phase = 'walking';
+      }
+      if (!waiting.length && !boarding.length && T.timer > 1.4) {
+        T.state = 'leave'; T.timer = 0;
+        T.path = [{ x: rank.x - 4, z: rank.lane }, { x: rank.x - 80, z: rank.lane }];
+      }
+    }
+    T.node.pos = [T.pos.x, -0.26, T.pos.z];
+    T.node.rot = [0, T.yaw, 0];
+  }
+
+  /** From anywhere in the lobby out through the front door to a spot at the kerb. */
+  taxiRoute(from, to) {
+    const { W, D } = this.dims;
+    const door = W / 2 + 0.3, inside = D - 1.9, outside = D + 1.4;
+    const pts = [];
+    if (from.z < D) pts.push({ x: from.x, z: inside }, { x: door, z: inside });
+    pts.push({ x: door, z: outside }, { x: to.x, z: outside }, { x: to.x, z: to.z });
+    return pts;
+  }
+
   /** Back walls (x=0, z=0) with windows; glass + mullions on the street sides (x=W, z=D). */
   addEnvelope(g, W, D, { doorAt = null } = {}) {
     const M = this.mats;
@@ -804,8 +950,15 @@ export class Office {
       glass.push(this.box(M.glass, doorAt, (WALL_H + 2.4) / 2, D, dw, WALL_H - 2.4, 0.04));
       glass.push(this.box(M.mullion, left, WALL_H / 2, D, 0.1, WALL_H, 0.1), this.box(M.mullion, right, WALL_H / 2, D, 0.1, WALL_H, 0.1));
       glass.push(this.box(M.mullion, doorAt, 2.4, D, dw, 0.1, 0.1));
-      glass.push(this.box(doorGlass, doorAt - 0.53, 1.2, D + 0.02, 1.02, 2.38, 0.03), this.box(doorGlass, doorAt + 0.53, 1.2, D + 0.02, 1.02, 2.38, 0.03));
-      glass.push(this.box(M.mullion, doorAt - 0.12, 1.1, D + 0.06, 0.03, 0.5, 0.03), this.box(M.mullion, doorAt + 0.12, 1.1, D + 0.06, 0.03, 0.5, 0.03));
+      // Sliding doors (with their handles): they open when a robot walks up to them.
+      const leaves = [
+        { node: this.box(doorGlass, doorAt - 0.53, 1.2, D + 0.02, 1.02, 2.38, 0.03), x: doorAt - 0.53, dir: -1 },
+        { node: this.box(doorGlass, doorAt + 0.53, 1.2, D + 0.02, 1.02, 2.38, 0.03), x: doorAt + 0.53, dir: 1 },
+        { node: this.box(M.mullion, doorAt - 0.12, 1.1, D + 0.06, 0.03, 0.5, 0.03), x: doorAt - 0.12, dir: -1 },
+        { node: this.box(M.mullion, doorAt + 0.12, 1.1, D + 0.06, 0.03, 0.5, 0.03), x: doorAt + 0.12, dir: 1 },
+      ];
+      glass.push(...leaves.map((l) => l.node));
+      this.entrance = leaves;
     }
     for (let x = 2.2; x < W - 0.3; x += 2.2) if (doorAt == null || Math.abs(x - doorAt) > 1.2) glass.push(this.box(M.mullion, x, WALL_H / 2, D, 0.07, WALL_H, 0.07));
     g.add(...glass);
@@ -879,7 +1032,7 @@ export class Office {
     this.r.deleteTexture(this.nameTex);
     const name = this.project?.name || 'Agent Office';
     this.nameTex = this.r.texture(signCanvas(name, this.css.accent, this.css.sign, this.css.signText));
-    g.add(new Node(this.r.meshes.plane, { color: [1, 1, 1], tex: this.nameTex, emissive: this.dark ? [0.25, 0.22, 0.2] : [0.05, 0.05, 0.05], noShadow: true }).at(door, 3.14, D + 0.07).size(3.0, 0.75, 1));
+    g.add(new Node(this.r.meshes.plane, { color: [1, 1, 1], tex: this.nameTex, emissive: this.dark ? [0.02, 0.02, 0.02] : [0.05, 0.05, 0.05], texEmit: this.dark ? 0.6 : 0, noShadow: true }).at(door, 3.14, D + 0.07).size(3.0, 0.75, 1));
     g.add(this.box({ color: lin(this.dark ? '#22252b' : '#5b5348'), noShadow: true }, door, 0.02, D + 0.9, 2.4, 0.02, 1.4));
     this.lobbyDoors = this.addShaft(g, W, -0.3, WALL_H);
     return g;
@@ -904,7 +1057,8 @@ export class Office {
     g.add(this.box(M.liftFrame, W + LIFT_W + 0.07, 0.8, LIFT_Z, 0.02, 0.5, 0.8));
     g.add(this.cyl(M.pole, W - 1.4, 2.0, D - 1.6, 0.05, 4));
     g.add(this.ball({ color: lin(this.css.needs), unlit: true }, W - 1.4, 4.05, D - 1.6, 0.09));
-    const logo = { color: [1, 1, 1], tex: this.logoTex, emissive: this.dark ? [0.35, 0.3, 0.25] : [0.06, 0.06, 0.06], noShadow: true };
+    // At night the sign glows with its own colours (texEmit), so the letters light up and the dark board stays dark.
+    const logo = { color: [1, 1, 1], tex: this.logoTex, emissive: this.dark ? [0.02, 0.02, 0.02] : [0.06, 0.06, 0.06], texEmit: this.dark ? 0.85 : 0, noShadow: true };
     const sw = Math.min(W - 2, 9);
     g.add(this.cyl(M.pole, W / 2 - sw * 0.35, 1.1, D - 0.6, 0.06, 1.6), this.cyl(M.pole, W / 2 + sw * 0.35, 1.1, D - 0.6, 0.06, 1.6));
     g.add(this.box(M.mullion, W / 2, 1.95 + sw * 0.09, D - 0.66, sw + 0.2, sw * 0.19 + 0.2, 0.08));
@@ -1064,6 +1218,13 @@ export class Office {
         base.box(P.paving2, W / 2, 0.004, D + 2.4, W + 2, 0.01, 3.6);
         for (const [x, z] of [[-4.2, -4.2], [W + 1.6, -4.2], [-4.2, D + 1.6], [-4.2, D / 2]]) tree(x, z, 1.05);
         for (const dx of [-3.2, 3.2]) { base.box(P.bench, W / 2 + dx, 0.42, D + 3.4, 1.8, 0.08, 0.5); base.box(P.pole, W / 2 + dx, 0.2, D + 3.4, 1.6, 0.4, 0.08); }
+        // taxi rank at the kerb in front of the entrance: a yellow bay and a sign
+        const rank = this.taxiRank(W, D);
+        for (const dz of [-0.62, 0.62]) base.box(P.yellow, rank.x, -0.252, rank.z + dz, 5.6, 0.012, 0.1);
+        for (const dx of [-2.8, 2.8]) base.box(P.yellow, rank.x + dx, -0.252, rank.z, 0.1, 0.012, 1.34);
+        base.cyl(P.pole, rank.x + 2.4, 1.2, D + 3.85, 0.04, 2.4);
+        base.box(P.yellow, rank.x + 2.4, 2.55, D + 3.85, 0.62, 0.32, 0.06);
+        base.box(P.asphalt, rank.x + 2.4, 2.55, D + 3.885, 0.5, 0.12, 0.01);
         const flagCols = [c(this.css.accent), c('#3a78c2'), c('#4c9a6a')];
         flagCols.forEach((fc, k) => {
           const fx = W + 2.2, fz = D - 1 - k * 1.4;
@@ -1127,7 +1288,9 @@ export class Office {
           for (let t = 4; t < len - 3; t += 6.2) {
             if (rnd() > 0.45) continue;
             const x = e.x0 + ux * t + e.dx * 2.3, z = e.z0 + uz * t + e.dz * 2.3;
-            car(base, x, z, Math.atan2(-uz, ux), pick(CARS));
+            const col = pick(CARS); // drawn even when skipped, so the rest of the city stays the same
+            if (i === 0 && j === 0 && e.dz === 1 && Math.abs(x - W / 2) < 6.5) continue; // keep the taxi rank free
+            car(base, x, z, Math.atan2(-uz, ux), col);
           }
         }
       }
@@ -1361,6 +1524,11 @@ export class Office {
     const { W, D } = this.dims;
     if (st.home) return { lvl: p.floor, x: p.d.seat.x, z: p.d.seat.z };
     if (st.lobby) return { lvl: this.lobbyLvl, x: W / 2 + 0.25, z: D / 2 + 0.5, face: { x: W / 2 - 0.6, z: D / 2 - 1.3 } };
+    if (st.taxi) {
+      // a place in the queue on the pavement, by the taxi rank
+      const k = [...this.people.values()].filter((o) => o !== p && o.leaving && o.trip?.where?.taxi).length % 5;
+      return { lvl: this.lobbyLvl, x: this.taxiRank().x + 0.3 - k * 0.6, z: D + 3.55, face: { x: this.taxiRank().x, z: D + 10 }, taxi: true, label: 'Taxi' };
+    }
     const q = st.visit ? this.people.get(st.visit) : null;
     if (q?.d && q.floor && this.isLevel(q.floor)) {
       return { lvl: q.floor, x: q.d.cx + 0.8, z: q.d.seat.z + 0.45, face: { x: q.d.seat.x, z: q.d.seat.z }, target: q };
@@ -1400,12 +1568,13 @@ export class Office {
       p.path = this.route(p.pos, t.spot);
     } else {
       t.stage = 'walk';
-      p.path = this.route(p.pos, where);
+      p.path = st.taxi ? this.taxiRoute(p.pos, where) : this.route(p.pos, where);
     }
     p.phase = 'walking';
   }
 
   endTrip(p) {
+    if (p.leaving) return this.removePerson(p);
     p.trip = null;
     p.path = null;
     p.lvl = p.floor;
@@ -1435,8 +1604,14 @@ export class Office {
     // The floor it stood on was removed (department deleted): straight back to its desk.
     if (t.stage !== 'ride' && !this.isLevel(p.lvl)) { p.queue = []; return this.endTrip(p); }
     if (p.group.parent !== (t.stage === 'ride' ? this.cab : p.lvl.node)) (t.stage === 'ride' ? this.cab : p.lvl.node).add(p.group);
-    if (t.liftTo && !this.isLevel(t.liftTo)) { t.stops[t.i] = { home: true }; t.liftTo = p.floor; }
+    if (t.liftTo && !this.isLevel(t.liftTo)) { t.stops[t.i] = p.leaving ? { taxi: true } : { home: true }; t.liftTo = p.leaving ? this.lobbyLvl : p.floor; }
     switch (t.stage) {
+      case 'taxiWait':
+        p.targetYaw = 0; // facing the street
+        break;
+      case 'taxiBoard':
+        if (this.walkPath(p, dt)) return this.removePerson(p);
+        break;
       case 'toLift':
         if (this.walkPath(p, dt)) { t.stage = 'waitLift'; p.phase = 'standing'; p.targetYaw = Math.PI / 2; }
         break;
@@ -1472,6 +1647,7 @@ export class Office {
       case 'walk':
         if (this.walkPath(p, dt)) {
           const st = t.stops[t.i];
+          if (st.taxi) { t.stage = 'taxiWait'; p.phase = 'standing'; p.targetYaw = 0; break; }
           // Home, unless it was moved to another department on the way: then off to the lift again.
           if (st.home) { if (p.floor === p.lvl) return this.endTrip(p); this.startStop(p); break; }
           // The robot we came for may have moved meanwhile: walk on to where it is now.
@@ -1626,7 +1802,7 @@ export class Office {
       let busy = false;
       for (const d of f.desks) {
         const p = this.people.get(d.session.id);
-        if (!p) continue;
+        if (!p || p.leaving) continue;
         if (p.trip) { this.stepTrip(p, dt); this.pose(p, dt); continue; }
         const s = p.session;
         const stand = { x: f.machine.x + 0.75 + (walker % 2) * 0.5, z: f.machine.z - 0.2 + Math.floor(walker / 2) * 0.55 };
@@ -1665,6 +1841,22 @@ export class Office {
       });
     }
     for (const n of this.interns.values()) this.poseIntern(n, dt);
+
+    // robots on their way home (their desks may already be gone), and the taxi that takes them
+    for (const p of this.people.values()) {
+      if (!p.leaving) continue;
+      if (p.trip) this.stepTrip(p, dt);
+      if (this.people.has(p.id)) this.pose(p, dt);
+    }
+    this.updateTaxi(dt);
+    // the front doors slide open for anyone walking through them
+    if (this.entrance) {
+      const { W, D } = this.dims;
+      const near = [...this.people.values()].some((p) => p.trip && p.lvl === this.lobbyLvl && Math.abs(p.pos.x - W / 2) < 1.6 && Math.abs(p.pos.z - D) < 1.8);
+      this.doorOpen = clamp((this.doorOpen || 0) + (near ? dt : -dt) / 0.6, 0, 1);
+      const o = ease(this.doorOpen) * 0.98;
+      for (const l of this.entrance) l.node.pos[0] = l.x + l.dir * o;
+    }
 
     // the lift, and speech for robots that have just walked in
     this.updateLift(dt);
@@ -1870,6 +2062,12 @@ export class Office {
     for (const n of this.interns.values()) {
       if (n.intern.status === 'working' && !n.hidden && this.floorVisible(n.floor)) glows.push({ pos: [n.home.x, n.floor.oy + 0.62, n.home.z], size: 0.6, color: lin(this.css.screenOn), alpha: this.dark ? 0.4 : 0.22 });
     }
+    if (this.dark && this.taxi) {
+      // headlights and the roof sign
+      const T = this.taxi, cs = Math.cos(T.yaw), sn = Math.sin(T.yaw);
+      for (const s of [-0.32, 0.32]) glows.push({ pos: [T.pos.x + 1.2 * cs + s * sn, 0.22, T.pos.z - 1.2 * sn + s * cs], size: 1.1, color: [1, 0.95, 0.8], alpha: 0.5 });
+      glows.push({ pos: [T.pos.x - 0.1 * cs, 0.92, T.pos.z + 0.1 * sn], size: 0.9, color: [1, 0.85, 0.4], alpha: 0.45 });
+    }
     if (this.dark && this.cab?.visible) glows.push({ pos: [this.cabX(), this.lift.y + 2.3, LIFT_Z], size: 1.8, color: [1, 0.9, 0.7], alpha: 0.4 });
     if (this.dark && this.city) for (const l of this.city.lamps) if (Math.hypot(l[0] - W / 2, l[2] - D / 2) < 75) glows.push({ pos: l, size: 2.8, color: [1, 0.8, 0.45], alpha: 0.45 });
     this.r.render(this.root, cam, env, glows);
@@ -1911,7 +2109,7 @@ export class Office {
       const headY = s.status === 'needs_you' && !p.trip ? 1.82 : standing ? 1.62 : 1.5;
       const talk = p.say && p.say.until > this.t ? p.say : null;
       let html = null, cls = 'lbl';
-      if (show && (!talk || s.status === 'needs_you')) {
+      if (show && !p.leaving && (!talk || s.status === 'needs_you')) {
         if (s.status === 'needs_you') {
           const txt = near ? esc(this.bubbleText(s) || s.reason || 'needs you') : '';
           html = `<span class="alert">!</span>${txt ? `<span class="alert-text">${txt}</span>` : ''}`;
@@ -1931,8 +2129,10 @@ export class Office {
           const who = talk.kind === 'brief' ? 'From you' : p.floor.name;
           th = `<span class="say ${esc(talk.kind)}"><b>${esc(who)}</b><span class="say-text sensitive">${esc(talk.text)}</span></span>`;
         } else if (p.trip && p.trip.stage !== 'stay' && (!sel || here)) {
-          const to = p.trip.where?.lvl;
-          if (to && to !== lvl) th = `<span class="trip">→ ${esc(to.name)}</span>`;
+          const w = p.trip.where, to = w?.lvl;
+          if (p.trip.stage === 'taxiWait') th = '<span class="trip">🚕 Waiting for a taxi</span>';
+          else if (w?.taxi && p.trip.stage !== 'taxiBoard') th = '<span class="trip">🚕 Going home</span>';
+          else if (to && to !== lvl) th = `<span class="trip">→ ${esc(to.name)}</span>`;
         }
       }
       place((p.talkHolder ||= {}), [pos[0], oy + headY + (html && talk ? 0.45 : 0), pos[2]], th, 'lbl talk');

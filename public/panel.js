@@ -3,7 +3,7 @@ import { $, esc, fmtTokens, fmtCost, fmtDur, relTime, STATUS_LABEL, store } from
 import { taskStrip } from './tasks.js';
 
 export class Panel {
-  constructor(source, { onOpenSession, onClose, onGiveTask, getConfig, onSent, getDepartments, onMove } = {}) {
+  constructor(source, { onOpenSession, onClose, onGiveTask, getConfig, onSent, getDepartments, onMove, onSendHome } = {}) {
     this.source = source;
     this.onOpenSession = onOpenSession || (() => {});
     this.onClose = onClose || (() => {});
@@ -12,6 +12,10 @@ export class Panel {
     this.onSent = onSent || (() => {});
     this.getDepartments = getDepartments || (() => []);
     this.onMove = onMove || (() => {});
+    this.onSendHome = onSendHome || (() => {});
+    $('#pHome').addEventListener('click', () => {
+      if (this.id && !this.data?.isSubagent && !this.homeBlock()) this.onSendHome(this.id);
+    });
     this.dept = $('#pDept');
     this.dept.addEventListener('change', () => {
       const s = this.data?.summary;
@@ -185,6 +189,10 @@ export class Panel {
     $('#pMeta').innerHTML = bits.join('');
     $('#pMeta').querySelector('[data-open]')?.addEventListener('click', (e) => { e.preventDefault(); this.onOpenSession(d.parentId); });
     $('#pTask').hidden = d.isSubagent;
+    const home = $('#pHome'), block = this.homeBlock();
+    home.hidden = d.isSubagent;
+    home.disabled = !!block;
+    home.title = block ? `Can't send it home now: ${block}` : 'Send this robot home by taxi. Its transcript stays on disk; it comes back if the session is used again.';
     this.renderDept();
     this.renderTask();
     this.renderComposer();
@@ -197,6 +205,16 @@ export class Panel {
   }
 
   setTasks(list) { this.tasks = list; if (this.data) { this.renderTask(); this.renderComposer(); } }
+
+  /** Why the robot can't be sent home right now, or null. The server checks this again. */
+  homeBlock() {
+    const s = this.data?.summary;
+    if (!s) return 'it is still loading';
+    if (this.tasks.some((t) => t.sessionId === this.id && t.status === 'running')) return 'it is on a task';
+    if (s.status === 'working') return 'it is working';
+    if (s.status === 'needs_you') return 'it is waiting on you';
+    return null;
+  }
 
   /** Which department the robot works in; changing it sends the robot up (or down) in the lift. */
   renderDept() {

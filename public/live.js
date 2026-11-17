@@ -57,6 +57,8 @@ export function liveSource() {
     async setDepartments(projectKey, departments) { return post('/api/org', { op: 'departments', projectKey, departments }); },
     /** Moves a robot to another department (it takes the lift). */
     async assign(projectKey, sessionId, dept) { return post('/api/org', { op: 'assign', projectKey, sessionId, dept }); },
+    /** Sends robots home by taxi. Resolves { dismissed: [ids], skipped: [{ id, reason }] } or { error }. */
+    async dismiss(projectKey, sessionIds) { return post('/api/org', { op: 'dismiss', projectKey, sessionIds }); },
     /** { projectKey, goal, mode, departments, start, maxTurns } → { run } or { error } */
     async startTeam(body) { return post('/api/teams', body); },
     async stopTeam(id) { const r = await post(`/api/teams/${encodeURIComponent(id)}/stop`, {}); return !r.error; },
