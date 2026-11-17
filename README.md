@@ -1,6 +1,6 @@
 # Agent Office
 
-A local, open-source observability app for [Claude Code](https://claude.com/claude-code), shown as a 3D office building in a small city.
+A local, source-available observability app for [Claude Code](https://claude.com/claude-code), shown as a 3D office building in a small city.
 
 - **Every project is a building.** Pick the one you want in the **Building** menu at the top left. The project's name hangs over the entrance.
 - **Every floor is a department:** Development, Design, QA, or whatever you add. A building has a lobby with a reception desk, one glass-walled floor per department, and a roof with a sign showing the project's name next to the Agent Office logo.
@@ -376,6 +376,16 @@ The landing page lives in [site/](site/): plain HTML, CSS and JS with no build s
 - **Repo URL:** set it once in the `<meta name="repo">` tag in `site/index.html`. The clone command and the GitHub link are filled from it.
 - **Publishing:** [.github/workflows/pages.yml](.github/workflows/pages.yml) deploys `site/` to GitHub Pages on every push to `main`. Turn it on once under **Settings → Pages → Source: GitHub Actions**.
 
+## Contributing
+
+This repository doesn't accept outside contributions. Pull requests from anyone other than the owner are closed automatically. See [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## License
 
-MIT © 2026 Mitchell Scholte. See [LICENSE](LICENSE).
+Agent Office is **source-available** under the [Functional Source License, Version 1.1, MIT Future License](LICENSE) (FSL-1.1-MIT). © 2026 Mitchell Scholte.
+
+- **You may** use it for free, also at work, and read, change and share the code.
+- **You may not** use it to build a competing product or service: selling it, offering it as a service, or releasing a rebranded copy that does the same thing.
+- **Two years after each release,** that version also becomes available under the MIT license.
+
+The name and logo are not covered by the license. A modified copy you share must not use them.

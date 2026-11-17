@@ -1,9 +1,9 @@
 {
   "name": "agent-office",
   "version": "0.1.0",
-  "description": "Local, open-source observability for Claude Code, shown as a 3D office.",
+  "description": "Local, source-available observability for Claude Code, shown as a 3D office.",
   "type": "module",
-  "license": "MIT",
+  "license": "FSL-1.1-MIT",
   "author": "Mitchell Scholte",
   "files": ["src", "public", "hooks", "scripts", "config.json", "README.md", "LICENSE"],
   "engines": { "node": ">=20" },

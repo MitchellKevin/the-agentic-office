@@ -1,0 +1,26 @@
+# Closes pull requests from anyone who isn't the repo owner.
+# This project doesn't take outside contributions (see CONTRIBUTING.md).
+#
+# Safe with pull_request_target: it never checks out or runs code from the
+# pull request, it only closes it with a comment using the GitHub CLI.
+name: Close outside pull requests
+
+on:
+  pull_request_target:
+    types: [opened, reopened]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  close:
+    if: github.event.pull_request.author_association != 'OWNER'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr close "$PR" --repo "$REPO" --comment "Thanks for your interest! This repository doesn't accept pull requests, so this one has been closed automatically. See CONTRIBUTING.md."
