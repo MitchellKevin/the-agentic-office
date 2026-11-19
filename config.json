@@ -11,6 +11,7 @@
   "tasks": { "enabled": true, "claudePath": null, "defaultMode": "acceptEdits", "maxRunning": 6, "worktreeRoot": "~/agent-office-worktrees", "approvalWaitSeconds": 600 },
   "orgFile": "~/.agent-office/org.json",
   "teams": { "defaultTurns": 8, "maxTurns": 30 },
+  "files": { "dir": "~/.agent-office/files", "maxFileMB": 50, "maxFiles": 200 },
 
   "contextWindows": [
     { "match": "fable", "tokens": 1000000 },

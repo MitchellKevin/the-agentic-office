@@ -5,6 +5,7 @@ import { demoSource } from './demo.js';
 import { Panel, Drawer } from './panel.js';
 import { TaskDialog } from './tasks.js';
 import { DeptDialog, TeamDialog, TeamDrawer } from './team.js';
+import { FilesDrawer } from './files.js';
 import { hourOf, isNight, fmtHour, phaseName } from './daylight.js';
 
 document.getElementById('boot')?.remove();
@@ -153,7 +154,7 @@ const panel = new Panel(source, {
 });
 const drawer = new Drawer(source);
 drawer.onOpen = (id) => select(id);
-$('#approvalsBtn').addEventListener('click', () => { teamDrawer.toggle(false); drawer.toggle(); });
+$('#approvalsBtn').addEventListener('click', () => { teamDrawer.toggle(false); filesDrawer.toggle(false); drawer.toggle(); });
 
 function select(id) {
   if (!id) { panel.close(); return; }
@@ -269,7 +270,11 @@ const teamDrawer = new TeamDrawer(source, {
   onStart: () => teamDlg.open(state.project),
   onShowFloor: (dept) => office?.showFloor(dept),
 });
-$('#teamBtn').addEventListener('click', () => { drawer.toggle(false); teamDrawer.toggle(); });
+$('#teamBtn').addEventListener('click', () => { drawer.toggle(false); filesDrawer.toggle(false); teamDrawer.toggle(); });
+
+// ---------- project files ----------
+const filesDrawer = new FilesDrawer(source, { getConfig: () => state.config, toast: (html, o) => toast(html, o) });
+$('#filesBtn').addEventListener('click', () => { drawer.toggle(false); teamDrawer.toggle(false); filesDrawer.toggle(); });
 
 // New team messages play out in the building: the sender takes the lift to whoever it is
 // talking to, and both get a speech bubble.
@@ -535,7 +540,9 @@ function renderNow() {
   const cur = projects.find((p) => p.key === state.project) || null;
   renderProjects(projects);
   $('#deptAdd').disabled = $('#deptEdit').disabled = $('#cleanBtn').disabled = !cur;
-  $('#teamBtn').disabled = !cur;
+  $('#teamBtn').disabled = $('#filesBtn').disabled = !cur;
+  filesDrawer.set(cur?.key || null, cur?.name);
+  if (!cur && filesDrawer.isOpen) filesDrawer.toggle(false);
   office?.setProject(cur ? { key: cur.key, name: cur.name, repo: cur.repo, departments: departmentsOf(state.org, cur.key) } : null);
   office?.setSessions(vis.filter((s) => s.projectKey === state.project));
   teamDrawer.set(state.teams, state.project, cur?.name);
@@ -640,6 +647,7 @@ addEventListener('keydown', (e) => {
   if ((e.key === 't' || e.key === 'T') && !e.metaKey && !e.ctrlKey && !e.altKey) { e.preventDefault(); openTaskDialog(); return; }
   if (e.key === 'Escape') {
     if (!$('#teamDrawer').hidden) teamDrawer.toggle(false);
+    else if (filesDrawer.isOpen) filesDrawer.toggle(false);
     else if (!$('#drawer').hidden) drawer.toggle(false);
     else if (panel.openId) panel.close();
     else office?.showBuilding();

@@ -1,6 +1,7 @@
 // Session store: discovers transcript files, tails them, links subagents to their
 // parent, overlays hook events, and emits compact summaries when something changes.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { EventEmitter } from 'node:events';
 import { Tail } from './tail.js';
@@ -11,6 +12,7 @@ import {
 import { combinedStatus, hookStatus } from './status.js';
 import { Approvals } from './approvals.js';
 import { Tasks } from './tasks.js';
+import { Library } from './library.js';
 import { GitInfo } from './git.js';
 import { Org } from './org.js';
 import { Teams } from './teams.js';
@@ -45,7 +47,13 @@ export class Store extends EventEmitter {
     // loadConfig() makes orgFile absolute; anything else (a raw config in tests) stays in memory.
     this.org = org || new Org(cfg.orgFile && path.isAbsolute(cfg.orgFile) ? cfg.orgFile : null);
     this.org.on('change', () => { this.emit('org', this.org.toJSON()); this.scheduleFlush(); });
-    this.teams = new Teams({ tasks: this.tasks, org: this.org, place: (key) => this.folderFor(key), cfg, now: () => this.now() });
+    // Project files per building. loadConfig() makes the folder absolute; a raw config (tests) uses a temp folder.
+    const filesDir = cfg.files?.dir;
+    this.library = new Library(filesDir && path.isAbsolute(filesDir) ? filesDir : path.join(os.tmpdir(), 'agent-office-files'), {
+      maxBytes: (cfg.files?.maxFileMB ?? 50) * 1024 * 1024,
+      maxFiles: cfg.files?.maxFiles ?? 200,
+    });
+    this.teams = new Teams({ tasks: this.tasks, org: this.org, place: (key) => this.folderFor(key), library: this.library, cfg, now: () => this.now() });
     this.teams.on('change', () => { this.emit('teams', this.teams.list()); this.scheduleFlush(); });
   }
 
@@ -487,6 +495,7 @@ export class Store extends EventEmitter {
       hideOlderThanHours: c.hideOlderThanHours, idleMinutes: c.idleMinutes, approvalWaitSeconds: c.approvalWaitSeconds, projectsDir: c.projectsDir,
       tasks: { enabled: this.tasks.enabled, available: !!this.tasks.binary(), defaultMode: c.tasks?.defaultMode || 'acceptEdits', worktreeRoot: c.tasks?.worktreeRoot || '~/agent-office-worktrees' },
       teams: { defaultTurns: this.teams.defaultTurns, maxTurns: this.teams.turnLimit },
+      files: { maxFileBytes: this.library.maxBytes, maxFiles: this.library.maxFiles },
     };
   }
 

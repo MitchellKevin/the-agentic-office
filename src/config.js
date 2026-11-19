@@ -23,5 +23,7 @@ export function loadConfig(overrides = {}) {
   // Departments per building. `"orgFile": null` keeps them in memory only.
   if (process.env.AGENT_OFFICE_ORG_FILE) cfg.orgFile = process.env.AGENT_OFFICE_ORG_FILE;
   cfg.orgFile = cfg.orgFile === null ? null : path.resolve(expandHome(cfg.orgFile || '~/.agent-office/org.json'));
+  // Project files you add from the page (Files button), one folder per building.
+  cfg.files = { ...cfg.files, dir: path.resolve(expandHome(cfg.files?.dir || '~/.agent-office/files')) };
   return cfg;
 }

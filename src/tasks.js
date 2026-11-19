@@ -78,13 +78,15 @@ export function findClaude(cfg = {}, { env = process.env, home = os.homedir() } 
 
 /**
  * argv for one task. The prompt is not in here: it goes in on stdin. A department's role goes
- * in as an appended system prompt (an argv entry, never through a shell).
+ * in as an appended system prompt (an argv entry, never through a shell). The building's project
+ * files folder is added with `--add-dir`, so the robot can read it without asking.
  */
-export function taskArgs({ sessionId, resume, mode, systemPrompt = null }) {
+export function taskArgs({ sessionId, resume, mode, systemPrompt = null, addDirs = [] }) {
   const args = ['-p', '--permission-mode', mode];
   if (resume) args.push('--resume', sessionId);
   else args.push('--session-id', sessionId);
   if (systemPrompt) args.push('--append-system-prompt', systemPrompt);
+  for (const d of addDirs) args.push('--add-dir', d);
   return args;
 }
 
@@ -126,7 +128,7 @@ export class Tasks extends EventEmitter {
    * `resume: false` hires a new robot (a fresh session id is generated here).
    * Returns { task } or { error, code }.
    */
-  start({ sessionId = null, resume = false, cwd, project, prompt, mode, branch = null, worktree = null, systemPrompt = null, dept = null, team = null, outputLimit = TAIL, maxPrompt = MAX_PROMPT }) {
+  start({ sessionId = null, resume = false, cwd, project, prompt, mode, branch = null, worktree = null, systemPrompt = null, addDirs = [], dept = null, team = null, outputLimit = TAIL, maxPrompt = MAX_PROMPT }) {
     if (!this.enabled) return { error: 'Tasks are turned off in config.json (tasks.enabled).', code: 403 };
     prompt = typeof prompt === 'string' ? prompt.trim() : '';
     if (!prompt) return { error: 'Write a task first.', code: 400 };
@@ -149,7 +151,7 @@ export class Tasks extends EventEmitter {
     };
     let child;
     try {
-      child = this.spawnFn(bin, taskArgs({ sessionId, resume, mode, systemPrompt: systemPrompt ? String(systemPrompt).slice(0, 8000) : null }), {
+      child = this.spawnFn(bin, taskArgs({ sessionId, resume, mode, systemPrompt: systemPrompt ? String(systemPrompt).slice(0, 12000) : null, addDirs }), {
         cwd, env: taskEnv(process.env, id), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true,
       });
     } catch (e) {

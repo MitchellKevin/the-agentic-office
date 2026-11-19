@@ -143,6 +143,21 @@ Things to know:
 - **Finding the CLI:** Agent Office looks for the Claude Code CLI on `PATH`, then in the usual install folders, then for the newest copy bundled with the VS Code (or Cursor/Windsurf) extension or the desktop app. Set `tasks.claudePath` to choose one yourself.
 - **Approvals wait longer for task robots.** Robots started from Agent Office have no terminal, so their permission requests wait in the Approvals drawer for up to 10 minutes (`tasks.approvalWaitSeconds`) instead of 45 seconds.
 
+### Project files
+
+Press **Files** (the folder icon) in the top bar to open the project files of the building on show. Add the material your robots may need, such as specs, designs, briefs, screenshots or data:
+
+- **＋ Add files**, or drop files on the drawer. A file with the same name is replaced, after you confirm.
+- **✕** removes a file.
+- The badge on the button shows how many files the building has.
+
+Each building has its own folder under `~/.agent-office/files/` (the path is shown at the bottom of the drawer). The robots don't read every file up front. They are told where the folder is and which files are in it, and they read a file when their work calls for it, or when you ask them to (*"check the brief in the project files"*):
+
+- **Tasks and team turns** started from Agent Office get the folder with `--add-dir`, so they can read it without asking, and a note about it in their appended system prompt.
+- **Sessions you start yourself** get the same note when they start, through the `SessionStart` hook (install the hooks with `npm run setup-hooks`). The folder is outside their project, so Claude Code asks before the first read, or it shows up in Approvals. Sessions that were already running when you added files don't know about the folder yet. Point them to it, or start a new session.
+
+The note tells the robots to treat the files as reference material, not as instructions.
+
 ### Talking to a robot from the Conversation tab
 
 Open a robot and go to its **Conversation** tab. Below the conversation is a message box:
@@ -274,9 +289,10 @@ With hooks installed, status comes from the hook events, which are exact, and th
 ## Privacy and security
 
 - The server binds to **127.0.0.1 only** and makes **no outbound network requests** itself. The only process it starts is `claude -p`, and only when you give a robot a task. That process talks to Anthropic exactly like Claude Code in your terminal does. The page loads no fonts, scripts or images from anywhere else, and a strict Content-Security-Policy enforces that.
-- Transcripts are opened **read-only**. Agent Office itself writes two files:
+- Transcripts are opened **read-only**. Agent Office itself writes only these:
   - `~/.agent-office/org.json`: your departments (names, roles, floor order), which robot works on which floor, and which robots you sent home. It holds session ids and times, no prompts or conversations, and is written only when you change departments, move a robot, hire one into a department or send robots home. Set `orgFile` to `null` to keep it in memory only.
   - `~/.claude/settings.json`, only when you run `setup-hooks` or `remove-hooks`.
+  - `~/.agent-office/files/`: the project files you add with the **Files** button, one folder per building. They stay until you remove them in the drawer. The page only names a building and a file name, never a path, so it can't read or write anywhere else.
 - Tasks and team runs you start can edit files in their project, like any Claude Code session. Set `tasks.enabled` to `false` to turn both off completely.
 - **Task folders come from the server, never from the page.** A task always runs in the working folder of a session Agent Office already knows. The prompt goes to the process on stdin, never through a shell.
 - **Protection against other websites:**
@@ -301,6 +317,9 @@ All settings live in [config.json](config.json). `PORT=xxxx npm start` overrides
 | `tasks.defaultMode` | `acceptEdits` | Mode preselected in the task dialog: `acceptEdits`, `plan` or `auto` |
 | `tasks.maxRunning` | 6 | Most tasks that may run at once |
 | `orgFile` | `~/.agent-office/org.json` | Where departments and floor assignments are kept. `null` keeps them in memory only. `AGENT_OFFICE_ORG_FILE` overrides it. |
+| `files.dir` | `~/.agent-office/files` | Where project files are kept, one folder per building |
+| `files.maxFileMB` | 50 | Largest project file you can add |
+| `files.maxFiles` | 200 | Most project files per building |
 | `teams.defaultTurns` | 8 | Turn limit preselected in the **Start a team** dialog |
 | `teams.maxTurns` | 30 | The highest turn limit a team run may have |
 | `contextWindows` | | Context-window size per model family. It is raised automatically if a session uses more context than the table allows. |

@@ -12,6 +12,7 @@ import { startWatcher } from './watcher.js';
 import { stepLabel } from './parser.js';
 import { ensureWorktree, worktreeRoot, WorktreeError } from './worktrees.js';
 import { roleSystemPrompt } from './teams.js';
+import { joinPrompts } from './library.js';
 
 const PUBLIC = path.join(ROOT, 'public');
 const MIME = {
@@ -57,18 +58,58 @@ export function createServer(cfg, store) {
   const heartbeat = setInterval(() => broadcast('ping', { now: Date.now(), ui: uiClients() }), 15_000);
   heartbeat.unref();
 
-  function readBody(req) {
+  function readBody(req, { limit = MAX_BODY, raw = false } = {}) {
     return new Promise((resolve, reject) => {
       let size = 0;
       const chunks = [];
       req.on('data', (c) => {
         size += c.length;
-        if (size > MAX_BODY) { reject(new Error('too large')); req.destroy(); return; }
+        if (size > limit) { reject(Object.assign(new Error('too large'), { tooLarge: true })); req.pause(); return; }
         chunks.push(c);
       });
-      req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
+      req.on('end', () => { const b = Buffer.concat(chunks); resolve(raw ? b : b.toString('utf8')); });
       req.on('error', reject);
     });
+  }
+
+  /**
+   * Project files of a building:
+   *   GET    /api/files?key=K              → { dir, files: [{ name, size, mtime }] }
+   *   POST   /api/files?key=K&name=N       raw bytes as the body; adds or replaces N
+   *   DELETE /api/files?key=K&name=N
+   * Only buildings the store knows. The page names a file, never a path.
+   */
+  async function handleFiles(req, res, url) {
+    const key = url.searchParams.get('key') || '';
+    if (!key || (!store.projectNameOf(key) && !store.org.project(key))) return send(res, 404, { error: 'Unknown building.' });
+    const lib = store.library;
+    const listing = () => ({ dir: lib.dirFor(key), files: lib.list(key) });
+    if (req.method === 'GET') return send(res, 200, listing());
+    const name = url.searchParams.get('name') || '';
+    if (req.method === 'DELETE') {
+      return lib.remove(key, name) ? send(res, 200, listing()) : send(res, 404, { error: 'File not found.' });
+    }
+    const tooBig = () => send(res, 413, { error: `Files are limited to ${Math.round(lib.maxBytes / 1024 / 1024)} MB.` }, { Connection: 'close' });
+    if (Number(req.headers['content-length']) > lib.maxBytes) return tooBig();
+    let buf;
+    try { buf = await readBody(req, { limit: lib.maxBytes, raw: true }); } catch (e) {
+      if (e.tooLarge) return tooBig();
+      throw e;
+    }
+    const r = lib.save(key, name || 'file', buf);
+    return r.error ? send(res, r.code, { error: r.error }) : send(res, 200, { file: r.file, ...listing() });
+  }
+
+  /**
+   * A session you started yourself is told about its building's project files when it starts.
+   * Tasks from Agent Office get the same note in their system prompt, so they are skipped here.
+   */
+  async function sessionStartContext(evt) {
+    if (store.tasks.activeFor(evt.session_id)) return null;
+    const s = store.sessions.get(evt.session_id);
+    if (!s) return null;
+    if (s.cwd) await store.git.repo(s.cwd).catch(() => {});
+    return store.library.note(store.placeOf(s).projectKey);
   }
 
   function serveStatic(req, res, urlPath) {
@@ -100,6 +141,10 @@ export function createServer(cfg, store) {
     if (!evt || typeof evt !== 'object') return send(res, 400, { error: 'bad payload' });
     store.applyHook(evt);
 
+    if (evt.hook_event_name === 'SessionStart') {
+      const context = await sessionStartContext(evt).catch(() => null);
+      return send(res, 200, context ? { ok: true, context } : { ok: true });
+    }
     if (evt.hook_event_name !== 'PermissionRequest') return send(res, 200, { ok: true });
 
     const askTools = new Set(cfg.askTools || []);
@@ -190,6 +235,11 @@ export function createServer(cfg, store) {
         return send(res, r.error ? r.code || 400 : 200, r.error ? { error: r.error } : { ok: true, task: r.task });
       }
 
+      if (p === '/api/files' && ['GET', 'POST', 'DELETE'].includes(req.method)) {
+        if (req.headers['x-ao-token'] !== token) return send(res, 403, { error: 'bad token' });
+        return handleFiles(req, res, url);
+      }
+
       if (req.method === 'POST' && /^\/api\/tasks\/[^/]+\/stop$/.test(p)) {
         if (req.headers['x-ao-token'] !== token) return send(res, 403, { error: 'bad token' });
         const ok = store.tasks.stop(decodeURIComponent(p.split('/')[3]));
@@ -276,9 +326,16 @@ function dismiss(store, key, sessionIds) {
   return { dismissed, skipped };
 }
 
-/** A department's role for a robot's tasks, as an appended system prompt. */
+/**
+ * What a robot's task is told on top of its prompt: its department's role and the building's
+ * project files (as an appended system prompt), plus the files folder as an extra readable dir.
+ */
 function roleFor(store, projectKey, deptId, project) {
-  return roleSystemPrompt(store.org.department(projectKey, deptId), project);
+  const files = store.library.forTask(projectKey);
+  return {
+    systemPrompt: joinPrompts(roleSystemPrompt(store.org.department(projectKey, deptId), project), files.note),
+    addDirs: files.addDirs,
+  };
 }
 
 /**
@@ -300,7 +357,7 @@ export async function startTask(store, { sessionId, projectKey, branch, newBranc
     if (sum.status === 'working') return { error: 'This robot is busy. Wait until it is your turn.', code: 409 };
     if (sum.status === 'needs_you') return { error: 'This robot is waiting on you. Answer it first.', code: 409 };
     if (sum.team && store.teams.runs.get(sum.team)?.status === 'running') return { error: 'This robot is part of a team run that is still going. Stop the run first.', code: 409 };
-    return store.tasks.start({ sessionId: s.id, resume: true, cwd: s.cwd, project: sum.project, prompt, mode, branch: sum.branch, worktree: sum.worktree, dept: sum.dept, systemPrompt: roleFor(store, sum.projectKey, sum.dept, sum.project) });
+    return store.tasks.start({ sessionId: s.id, resume: true, cwd: s.cwd, project: sum.project, prompt, mode, branch: sum.branch, worktree: sum.worktree, dept: sum.dept, ...roleFor(store, sum.projectKey, sum.dept, sum.project) });
   }
   if (!projectKey) return { error: 'Pick a robot or a floor.', code: 400 };
   const key = String(projectKey);
@@ -328,13 +385,13 @@ export async function startTask(store, { sessionId, projectKey, branch, newBranc
     return hired(store.tasks.start({
       resume: false, cwd: place.cwd, project: repo.name, prompt, mode,
       branch: place.branch, worktree: place.cwd === repo.mainTop ? null : place.cwd,
-      dept: deptId, systemPrompt: role(repo.name),
+      dept: deptId, ...role(repo.name),
     }));
   }
 
   const where = store.folderFor(key);
   if (!where) return { error: 'No known folder for that building yet.', code: 404 };
-  return hired(store.tasks.start({ resume: false, cwd: where.cwd, project: where.project, prompt, mode, branch: where.branch, dept: deptId, systemPrompt: role(where.project) }));
+  return hired(store.tasks.start({ resume: false, cwd: where.cwd, project: where.project, prompt, mode, branch: where.branch, dept: deptId, ...role(where.project) }));
 }
 
 async function main() {

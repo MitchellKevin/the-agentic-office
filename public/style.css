@@ -682,6 +682,27 @@ button.tm-who:hover { background: var(--accent); color: #fff; }
 @media (max-width: 900px) { .team-drawer { left: 8px; } }
 @media (max-width: 520px) { .team-drawer { right: 8px; width: auto; } }
 
+/* ---------- project files ---------- */
+.files-btn:disabled { opacity: .5; cursor: default; }
+.badge.count { background: var(--idle); }
+.files-drawer { left: 236px; }
+.files-drawer h2 .muted { font-weight: 500; font-size: 13px; }
+.files-drawer.dragging { outline: 2px dashed var(--accent); outline-offset: -6px; }
+.fd-actions { padding: 0 14px 8px; }
+.fd-actions .btn { width: 100%; }
+.fd-drop { display: none; margin: 4px 0 8px; padding: 18px; border: 2px dashed var(--accent); border-radius: 10px; text-align: center; font-size: 13px; color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, var(--panel)); }
+.files-drawer.dragging .fd-drop { display: block; }
+.fd-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.fd-item { display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 8px; padding: 6px 6px 6px 10px; border: 1px solid var(--border); border-radius: 9px; background: var(--panel-2); font-size: 13px; }
+.fd-item.uploading { opacity: .65; }
+.fd-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fd-meta { color: var(--muted); font-size: 11.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.fd-item .icon-btn { width: 24px; height: 24px; font-size: 12px; }
+.fd-empty { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+.fd-dir { margin: 10px 0 0; font: 11px/1.4 var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 900px) { .files-drawer { left: 8px; } }
+@media (max-width: 520px) { .files-drawer { right: 8px; width: auto; } .fd-meta { display: none; } }
+
 /* speech between robots (positioned by office.js) */
 .lbl.talk { z-index: 1; }
 .say {

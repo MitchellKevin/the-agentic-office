@@ -5,6 +5,7 @@
 // - Never blocks Claude Code: if the server is down we exit 0 immediately, silently.
 // - PermissionRequest: if a browser tab is open, wait (up to ~45s) for Allow/Deny and
 //   print the decision. Otherwise print nothing so the normal terminal prompt appears.
+// - SessionStart: print the note about the project's files, if the server has one.
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -57,6 +58,16 @@ if (evt.hook_event_name === 'PermissionRequest') {
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'allow' } } }));
   } else if (decision === 'deny') {
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'PermissionRequest', decision: { behavior: 'deny', message: 'Denied from Agent Office' } } }));
+  }
+  process.exit(0);
+}
+
+// SessionStart: the server may answer with a note about the building's project files, which
+// Claude Code adds to the session's context.
+if (evt.hook_event_name === 'SessionStart') {
+  const res = await post(raw, 3000);
+  if (typeof res?.context === 'string' && res.context) {
+    process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: 'SessionStart', additionalContext: res.context } }));
   }
   process.exit(0);
 }

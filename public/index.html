@@ -36,6 +36,11 @@
     </div>
 
     <div class="tools">
+      <button class="tool-btn files-btn" id="filesBtn" title="Project files: reference files the robots in this building can read" aria-expanded="false" aria-controls="filesDrawer">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5V18a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9.5a2 2 0 0 0-2-2h-7l-2-2.5H5a2 2 0 0 0-2 2Z"/></svg>
+        <span class="tool-label">Files</span>
+        <span class="badge count" id="filesBadge" hidden>0</span>
+      </button>
       <button class="tool-btn team-btn" id="teamBtn" title="Team: let the departments work together on a goal" aria-expanded="false" aria-controls="teamDrawer">
         <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="8" r="3"/><circle cx="16.5" cy="9.5" r="2.5"/><path d="M2.5 19c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5"/><path d="M14 14.6c.8-.4 1.6-.6 2.5-.6 2.3 0 4.2 1.5 4.7 4.5"/></svg>
         <span class="tool-label">Team</span>
@@ -232,6 +237,24 @@
     <p class="drawer-hint">The departments work on one goal together, on their own. One works at a time, then takes the lift to hand the work to the next with a short message.</p>
     <div class="td-actions"><button class="btn allow" id="tdStart" type="button">Start a team…</button></div>
     <div class="drawer-body" id="tdBody"></div>
+  </aside>
+
+  <aside class="drawer files-drawer" id="filesDrawer" aria-label="Project files" hidden>
+    <div class="drawer-head">
+      <h2>Project files <span class="muted" id="fdProject"></span></h2>
+      <button class="icon-btn" id="fdClose" aria-label="Close project files">✕</button>
+    </div>
+    <p class="drawer-hint">Specs, designs, briefs, data: everything the robots in this building may need. They are told where these files are and read them when their work calls for it, or when you ask them to.</p>
+    <div class="fd-actions">
+      <button class="btn allow" id="fdAdd" type="button">＋ Add files</button>
+      <input type="file" id="fdInput" multiple hidden>
+    </div>
+    <div class="drawer-body">
+      <div class="fd-drop" id="fdDrop">Drop files here</div>
+      <ul class="fd-list sensitive" id="fdList" aria-label="Files"></ul>
+      <p class="fd-empty" id="fdEmpty" hidden>No files yet. Add them with the button, or drop them here.</p>
+      <p class="fd-dir sensitive" id="fdDir"></p>
+    </div>
   </aside>
 
   <dialog class="task-dlg" id="teamDlg" aria-labelledby="tmTitle">

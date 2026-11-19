@@ -7,6 +7,7 @@
 // remembers what it did before. A run stops at its turn limit so it can never loop forever.
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
+import { joinPrompts } from './library.js';
 
 export const MAX_GOAL = 8000;
 export const MAX_SAY = 90;
@@ -108,12 +109,14 @@ export class Teams extends EventEmitter {
    * @param tasks  the Tasks runner
    * @param org    the Org (departments and assignments)
    * @param place  (projectKey) => { cwd, project, branch } | null — the folder a run works in
+   * @param library  the project files (optional): every turn is told about them
    */
-  constructor({ tasks, org, place, cfg = {}, now = () => Date.now() }) {
+  constructor({ tasks, org, place, library = null, cfg = {}, now = () => Date.now() }) {
     super();
     this.tasks = tasks;
     this.org = org;
     this.place = place;
+    this.library = library;
     this.cfg = cfg;
     this.now = now;
     this.runs = new Map();
@@ -187,10 +190,11 @@ export class Teams extends EventEmitter {
   turn(run, dept, from, message, say) {
     run.turn++;
     const sessionId = run.robots[dept.id] || null;
+    const files = this.library?.forTask(run.projectKey) || { note: null, addDirs: [] };
     const r = this.tasks.start({
       sessionId, resume: !!sessionId, cwd: run.cwd, project: run.project, mode: run.mode, branch: run.branch,
       prompt: turnPrompt({ goal: run.fullGoal, project: run.project, departments: run.departments, dept, from, message, turn: run.turn, maxTurns: run.maxTurns }),
-      systemPrompt: roleSystemPrompt(dept, run.project),
+      systemPrompt: joinPrompts(roleSystemPrompt(dept, run.project), files.note), addDirs: files.addDirs,
       dept: dept.id, team: run.id, outputLimit: 64_000, maxPrompt: MAX_GOAL + MAX_MESSAGE + 8000,
     });
     if (r.error) return r;

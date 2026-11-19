@@ -7,6 +7,15 @@ const PROJECTS = [
   { key: 'demo-docs', name: 'docs-site', cwd: '/demo/docs-site', branch: 'main' },
   { key: 'demo-ml', name: 'forecasting', cwd: '/demo/forecasting', branch: 'exp/seasonality' },
 ];
+// Project files per building (the Files button). A couple to start with, so the drawer has something in it.
+const DEMO_FILES = {
+  'demo-storefront': [
+    { name: 'brand-guidelines.pdf', size: 2_480_000, mtime: Date.now() - 3 * 86400_000 },
+    { name: 'checkout-flow.png', size: 640_000, mtime: Date.now() - 86400_000 },
+    { name: 'product-brief.md', size: 7_200, mtime: Date.now() - 2 * 3600_000 },
+  ],
+};
+const filesOf = (key) => ({ dir: `~/.agent-office/files/${String(key).replace(/^demo-/, '')}`, files: (DEMO_FILES[key] || []).slice() });
 const TITLES = [
   'Add dark mode toggle to settings', 'Fix flaky checkout test', 'Refund endpoint with idempotency keys',
   'Migrate docs to new sidebar', 'Speed up product image loading', 'Investigate memory leak in worker',
@@ -488,7 +497,7 @@ export function demoSource() {
     connect(handlers) {
       h = handlers;
       h.status('demo');
-      h.state({ now: now(), sessions: sessions.map(summary), counters: counters(), approvals: approvals.slice(), tasks: [], org: orgView(), teams: [], config: { hideOlderThanHours: 12, tasks: { enabled: true, available: true, defaultMode: 'acceptEdits', worktreeRoot: '~/agent-office-worktrees' }, teams: { defaultTurns: 8, maxTurns: 30 } } });
+      h.state({ now: now(), sessions: sessions.map(summary), counters: counters(), approvals: approvals.slice(), tasks: [], org: orgView(), teams: [], config: { hideOlderThanHours: 12, tasks: { enabled: true, available: true, defaultMode: 'acceptEdits', worktreeRoot: '~/agent-office-worktrees' }, teams: { defaultTurns: 8, maxTurns: 30 }, files: { maxFileBytes: 50 * 1024 * 1024, maxFiles: 200 } } });
       setInterval(tick, 700);
       // A team is already at work in the first building, so the lift has something to do.
       if (!RECORDING) setTimeout(() => autoTeam(PROJECTS[0].key), 3500);
@@ -522,6 +531,21 @@ export function demoSource() {
     },
     async startTask(body) { return startTask(body); },
     async branches(key) { return branchesOf(key); },
+    // Project files live only in this page: nothing is uploaded in the demo.
+    async listFiles(key) { return filesOf(key); },
+    async uploadFile(key, file) {
+      await new Promise((r) => setTimeout(r, 250));
+      const list = (DEMO_FILES[key] ||= []);
+      const f = { name: file.name || 'file', size: file.size, mtime: now() };
+      const i = list.findIndex((x) => x.name === f.name);
+      if (i >= 0) list[i] = f; else list.push(f);
+      list.sort((a, b) => a.name.localeCompare(b.name));
+      return { file: f, ...filesOf(key) };
+    },
+    async removeFile(key, name) {
+      DEMO_FILES[key] = (DEMO_FILES[key] || []).filter((f) => f.name !== name);
+      return filesOf(key);
+    },
     async stopTask(id) { finishTask(id, 'stopped'); return true; },
     async setDepartments(key, list) { return setDepartments(key, list); },
     async assign(key, sessionId, dept) { return assign(key, sessionId, dept); },

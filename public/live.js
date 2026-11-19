@@ -49,6 +49,11 @@ export function liveSource() {
         return r.ok ? r.json() : { isRepo: false, branches: [] };
       } catch { return { isRepo: false, branches: [] }; }
     },
+    /** Project files of a building: { dir, files: [{ name, size, mtime }] } or { error }. */
+    async listFiles(projectKey) { return filesCall('GET', projectKey); },
+    /** Adds (or replaces) one file. Resolves { file, dir, files } or { error }. */
+    async uploadFile(projectKey, file) { return filesCall('POST', projectKey, file.name || 'file', file); },
+    async removeFile(projectKey, name) { return filesCall('DELETE', projectKey, name); },
     async stopTask(id) {
       const r = await fetch(`/api/tasks/${encodeURIComponent(id)}/stop`, { method: 'POST', headers: { 'X-AO-Token': token } });
       return r.ok;
@@ -63,6 +68,19 @@ export function liveSource() {
     async startTeam(body) { return post('/api/teams', body); },
     async stopTeam(id) { const r = await post(`/api/teams/${encodeURIComponent(id)}/stop`, {}); return !r.error; },
   };
+
+  async function filesCall(method, key, name = null, body = undefined) {
+    const q = `key=${encodeURIComponent(key)}${name != null ? `&name=${encodeURIComponent(name)}` : ''}`;
+    try {
+      const headers = { 'X-AO-Token': token };
+      if (body) headers['Content-Type'] = 'application/octet-stream';
+      const r = await fetch(`/api/files?${q}`, { method, headers, body, cache: 'no-store' });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? j : { error: j.error || `Request failed (${r.status})` };
+    } catch {
+      return { error: 'Could not reach the local server.' };
+    }
+  }
 
   async function post(url, body) {
     try {
